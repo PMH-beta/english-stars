@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>⭐ English Stars</title>
 <!-- PWA: installierbar auf Handy/Desktop -->
 <link rel="manifest" href="manifest.json">
@@ -21,6 +21,19 @@
   --shadow:0 6px 0px rgba(0,0,0,0.15);
 }
 *{box-sizing:border-box;margin:0;padding:0;}
+html,body{
+  touch-action:manipulation;
+  -webkit-touch-callout:none;
+  -webkit-user-select:none;
+  -ms-user-select:none;
+  user-select:none;
+  overscroll-behavior:none;
+}
+input,textarea{
+  -webkit-user-select:auto;
+  user-select:auto;
+  touch-action:auto;
+}
 body{
   font-family:'Nunito',sans-serif;background:var(--bg);min-height:100vh;
   display:flex;flex-direction:column;align-items:center;padding:16px 14px 130px;
@@ -257,9 +270,18 @@ h1{font-family:'Fredoka One',cursive;font-size:2.3rem;color:var(--orange);text-s
   direction:rtl;
   width:30px;height:120px;cursor:pointer;
 }
-body.in-game .music-btn-global,body.in-game .music-vol-wrap,body.in-game .music-vol-btn{display:none;}
 body.in-game .music-vol-wrap.open{display:none;}
-/* Kleiner Lautstärke-Toggle-Knopf über dem Musik-Button */
+/* Im Spiel: kein Music-Button in der Score-Bar - der globale unten reicht */
+body.in-game .score-bar .music-btn{display:none;}
+/* Im Spiel: globalen Music-Button + Vol-Button sichtbar lassen (statt verstecken) */
+body.in-game .music-btn-global{display:flex !important;}
+body.in-game .music-vol-btn{display:flex !important;}
+body.in-game .music-vol-wrap.open{display:flex !important;}
+
+/* Mobile (Touch-Geräte): Lautstärke-Regler komplett aus - User regelt am Gerät */
+@media (pointer:coarse), (max-width:599px){
+  .music-vol-btn,.music-vol-wrap{display:none !important;}
+}
 .music-vol-btn{
   position:fixed;bottom:76px;right:24px;z-index:498;
   font-family:'Fredoka One',cursive;font-size:.9rem;
@@ -856,10 +878,10 @@ body.in-game .mode-progress{display:block;}
 <button id="pwa-install-btn" onclick="pwaInstall()" title="Als App installieren">📲 App installieren</button>
 <button class="music-vol-btn" id="music-vol-btn" onclick="toggleVolPopup()" title="Lautstärke">🔊</button>
 <div class="music-vol-wrap" id="music-vol-wrap">
-  <span id="music-vol-lbl">10%</span>
-  <input type="range" min="0" max="100" value="10" id="music-vol-slider" oninput="setMusicVolume(this.value/100)" />
+  <span id="music-vol-lbl">50%</span>
+  <input type="range" min="0" max="100" value="50" id="music-vol-slider" oninput="setMusicVolume(this.value/100)" />
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:.65rem;color:#bbb;font-weight:700;z-index:1000;pointer-events:none;">v3.16</div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:.65rem;color:#bbb;font-weight:700;z-index:1000;pointer-events:none;">v3.18</div>
 
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script>
@@ -2040,6 +2062,8 @@ function handleCorrect(){
     showFeedback(true,msg,'');
     // Bei Aussprache: Mic-Button auf Final-Correct setzen
     if(currentQ&&currentQ.type==='pronounce') setMicFinalStatus(true);
+    // Sound: Streak-Sparkle bei 3+, sonst normaler Correct-Sound
+    try{ playSfx(streak>=3?'streak':'correct'); }catch(e){}
     if(streak===5||streak===10) spawnConfetti();
   }catch(e){
     console.error('handleCorrect:',e);
@@ -2086,6 +2110,7 @@ function handleWrong(){
     headline=pickW(close?wrongTexts.close:wrongTexts.normal);
 
     showFeedback(false,headline,'Richtige Antwort: '+(currentQ&&currentQ.answer||'?'));
+    try{ playSfx('wrong'); }catch(e){}
   }catch(e){
     console.error('handleWrong:',e);
     try{ showFeedback(false,'❌ Nicht ganz!','Richtige Antwort: '+(currentQ&&currentQ.answer||'?')); }catch(e2){}
@@ -2104,7 +2129,7 @@ function updateScoreBar(){
 // Findet alle MP3-Dateien im selben Ordner. User kann eigene MP3s einfach reinkopieren.
 let _musicTracks=[];
 let _musicAudio=null, _musicIdx=0, _musicOn=false;
-let _musicVolume=0.10;
+let _musicVolume=0.50;
 let _musicErrorRetries=0; // verhindert Endlos-Loop bei kaputten Dateien
 
 function _trackUrl(name){ return encodeURIComponent(name); }
@@ -2191,16 +2216,39 @@ function _initAudio(){
 }
 
 async function startMusic(){
-  await _discoverTracks();
+  // Falls Tracks noch nicht entdeckt: erst entdecken (asynchron, vor User-Klick)
+  // Aber wenn User klickt, MUSS play() im selben Tick laufen für iOS.
   if(_musicTracks.length===0){
-    console.warn('Keine MP3-Dateien im Ordner gefunden');
-    return;
+    await _discoverTracks();
+  }
+  if(_musicTracks.length===0){
+    console.warn('Keine MP3-Dateien gefunden');
+    return false;
   }
   _musicOn=true;
   _musicErrorRetries=0;
   const a=_initAudio();
   if(!a.src) a.src=_trackUrl(_musicTracks[_musicIdx]);
-  a.play().catch(()=>{ _musicOn=false; });
+  try{
+    const p=a.play();
+    if(p) p.catch(()=>{ _musicOn=false; });
+  }catch(e){ _musicOn=false; }
+  return true;
+}
+// Synchrone Version für iOS - benutzt cached Tracks oder default
+function startMusicSync(){
+  if(_musicTracks.length===0){
+    // Fallback: nehme einfach den ersten erwarteten Track
+    _musicTracks=['HoliznaCC0 - 2  (jazz).mp3'];
+  }
+  _musicOn=true;
+  _musicErrorRetries=0;
+  const a=_initAudio();
+  if(!a.src) a.src=_trackUrl(_musicTracks[_musicIdx]);
+  try{
+    const p=a.play();
+    if(p) p.catch(()=>{ _musicOn=false; _setMusicBtns(false); });
+  }catch(e){ _musicOn=false; }
 }
 function stopMusic(){
   _musicOn=false;
@@ -2221,8 +2269,24 @@ function _setMusicBtns(on){
   });
 }
 function toggleMusic(){
-  if(_musicOn){stopMusic();_setMusicBtns(false);try{localStorage.setItem('es_music','0');}catch(e){}}
-  else        {startMusic();_setMusicBtns(true); try{localStorage.setItem('es_music','1');}catch(e){}}
+  if(_musicOn){
+    stopMusic();_setMusicBtns(false);
+    try{localStorage.setItem('es_music','0');}catch(e){}
+  } else {
+    // Direkt synchron starten für iOS (User-Geste muss erhalten bleiben)
+    startMusicSync();
+    _setMusicBtns(true);
+    try{localStorage.setItem('es_music','1');}catch(e){}
+    // Im Hintergrund Track-Liste vervollständigen
+    _discoverTracks().then(()=>{
+      // Wenn die Default-Datei nicht existierte, neu starten
+      if(_musicAudio && _musicAudio.error && _musicTracks.length>0){
+        _musicIdx=0;
+        _musicAudio.src=_trackUrl(_musicTracks[0]);
+        _musicAudio.play().catch(()=>{});
+      }
+    });
+  }
 }
 let _volPopupTimer=null;
 function toggleVolPopup(){
@@ -2253,8 +2317,76 @@ function toggleVolPopup(){
   }
 }
 // ════════════════════════════════════════════════
-//  PWA – Service Worker + Install-Knopf
+//  SOUND-EFFEKTE (über Web Audio API generiert, keine Dateien nötig)
 // ════════════════════════════════════════════════
+let _sfxCtx=null;
+function _sfx(){ 
+  if(!_sfxCtx){
+    try{ _sfxCtx=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){return null;}
+  }
+  return _sfxCtx;
+}
+function playSfx(type){
+  const ctx=_sfx(); if(!ctx) return;
+  if(ctx.state==='suspended') ctx.resume();
+  const t=ctx.currentTime;
+  const out=ctx.createGain();
+  out.gain.value=1.0;
+  out.connect(ctx.destination);
+
+  if(type==='click'){
+    // Kurzes Blubber/Pop
+    const o=ctx.createOscillator();
+    const g=ctx.createGain();
+    o.type='sine'; o.frequency.setValueAtTime(800,t); o.frequency.exponentialRampToValueAtTime(1400,t+0.05);
+    g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(.4,t+.005); g.gain.exponentialRampToValueAtTime(.001,t+.08);
+    o.connect(g); g.connect(out);
+    o.start(t); o.stop(t+.1);
+  } else if(type==='correct'){
+    // Aufsteigender 2-Ton: hoch hoch
+    [880,1320].forEach((f,i)=>{
+      const o=ctx.createOscillator(); const g=ctx.createGain();
+      o.type='triangle'; o.frequency.value=f;
+      const s=t+i*0.09;
+      g.gain.setValueAtTime(0,s); g.gain.linearRampToValueAtTime(.35,s+.01); g.gain.exponentialRampToValueAtTime(.001,s+.12);
+      o.connect(g); g.connect(out); o.start(s); o.stop(s+.15);
+    });
+  } else if(type==='wrong'){
+    // Tiefer Buzz
+    const o=ctx.createOscillator(); const g=ctx.createGain();
+    o.type='sawtooth'; o.frequency.setValueAtTime(220,t); o.frequency.exponentialRampToValueAtTime(110,t+.18);
+    g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(.25,t+.02); g.gain.exponentialRampToValueAtTime(.001,t+.22);
+    o.connect(g); g.connect(out); o.start(t); o.stop(t+.25);
+  } else if(type==='streak'){
+    // Sparkle: 3 schnelle hohe Töne
+    [1200,1500,1800].forEach((f,i)=>{
+      const o=ctx.createOscillator(); const g=ctx.createGain();
+      o.type='sine'; o.frequency.value=f;
+      const s=t+i*0.05;
+      g.gain.setValueAtTime(0,s); g.gain.linearRampToValueAtTime(.3,s+.005); g.gain.exponentialRampToValueAtTime(.001,s+.1);
+      o.connect(g); g.connect(out); o.start(s); o.stop(s+.12);
+    });
+  } else if(type==='end'){
+    // Triumph: C-E-G aufsteigend
+    [523,659,784,1047].forEach((f,i)=>{
+      const o=ctx.createOscillator(); const g=ctx.createGain();
+      o.type='triangle'; o.frequency.value=f;
+      const s=t+i*0.08;
+      g.gain.setValueAtTime(0,s); g.gain.linearRampToValueAtTime(.3,s+.01); g.gain.exponentialRampToValueAtTime(.001,s+.3);
+      o.connect(g); g.connect(out); o.start(s); o.stop(s+.32);
+    });
+  }
+}
+
+// Click-Sound auf alle Buttons automatisch
+document.addEventListener('click',e=>{
+  const t=e.target;
+  if(!t) return;
+  // Nur echte Buttons - nicht den Mode-Progress-Knopf etc.
+  if(t.tagName==='BUTTON' || t.closest('button')){
+    playSfx('click');
+  }
+},true);
 let _pwaPrompt=null;
 if('serviceWorker' in navigator){
   window.addEventListener('load',()=>{
@@ -2267,22 +2399,55 @@ window.addEventListener('beforeinstallprompt',(e)=>{
   const btn=document.getElementById('pwa-install-btn');
   if(btn) btn.style.display='flex';
 });
-function pwaInstall(){
-  if(!_pwaPrompt) return;
-  _pwaPrompt.prompt();
-  _pwaPrompt.userChoice.then(()=>{ _pwaPrompt=null; const b=document.getElementById('pwa-install-btn'); if(b) b.style.display='none'; });
+function _isIOS(){
+  return /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
 }
+function _isMacSafari(){
+  const ua=navigator.userAgent;
+  return ua.indexOf('Mac')!==-1 && ua.indexOf('Safari')!==-1 && ua.indexOf('Chrome')===-1 && !_isIOS();
+}
+function _isStandalone(){
+  return window.matchMedia('(display-mode: standalone)').matches ||
+    window.navigator.standalone===true;
+}
+function pwaInstall(){
+  if(_pwaPrompt){
+    _pwaPrompt.prompt();
+    _pwaPrompt.userChoice.then(()=>{ _pwaPrompt=null; const b=document.getElementById('pwa-install-btn'); if(b) b.style.display='none'; });
+    return;
+  }
+  if(_isIOS()){
+    alert('📲 App auf iPhone/iPad installieren:\n\n1. Tippe unten in Safari auf das Teilen-Symbol ⬆️\n2. Wähle "Zum Home-Bildschirm"\n3. Tippe oben rechts auf "Hinzufügen"\n\nDie App erscheint dann wie eine normale App auf dem Home-Bildschirm.');
+  } else if(_isMacSafari()){
+    alert('📲 App auf Mac installieren (Safari):\n\n1. Menüleiste: "Datei"\n2. "Zum Dock hinzufügen..."\n3. "Hinzufügen" klicken\n\nDie App erscheint dann im Dock.');
+  } else {
+    alert('Auf Chrome/Edge: ein "Installieren"-Symbol erscheint in der Adressleiste.');
+  }
+}
+// iOS/Mac-Safari: Button trotzdem zeigen (kein beforeinstallprompt-Event)
+window.addEventListener('load',()=>{
+  if(_isStandalone()) return;
+  if(_isIOS() || _isMacSafari()){
+    const btn=document.getElementById('pwa-install-btn');
+    if(btn) btn.style.display='flex';
+  }
+});
 
 window.addEventListener('DOMContentLoaded',()=>{
+  const isMobile = matchMedia('(pointer:coarse)').matches || innerWidth<600;
   try{
-    const v=localStorage.getItem('es_music_vol');
-    if(v){
-      _musicVolume=parseFloat(v);
-      const sl=document.getElementById('music-vol-slider');
-      const lbl=document.getElementById('music-vol-lbl');
-      if(sl) sl.value=Math.round(_musicVolume*100);
-      if(lbl) lbl.textContent=Math.round(_musicVolume*100)+'%';
+    if(isMobile){
+      // Auf Mobile: feste 50% - Slider ist eh versteckt, User regelt am Gerät
+      _musicVolume=0.50;
+    } else {
+      const v=localStorage.getItem('es_music_vol');
+      if(v) _musicVolume=parseFloat(v);
     }
+    const sl=document.getElementById('music-vol-slider');
+    const lbl=document.getElementById('music-vol-lbl');
+    if(sl) sl.value=Math.round(_musicVolume*100);
+    if(lbl) lbl.textContent=Math.round(_musicVolume*100)+'%';
   }catch(e){}
   let pref='1';
   try{ const v=localStorage.getItem('es_music'); if(v!==null) pref=v; }catch(e){}
@@ -2422,6 +2587,7 @@ function showEnd(){
   const mp = progressForCurrentMode();
   if(mp && mp.total>0 && mp.mastered>=mp.total){
     spawnConfetti();
+    try{ playSfx('end'); }catch(e){}
     setTimeout(()=>{
       alert('🏆 100% erreicht! Du hast den Modus "'+(mp.title||mode)+'" gemeistert!');
       showMenu();

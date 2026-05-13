@@ -2,7 +2,7 @@
   "name": "English Stars",
   "short_name": "EnglishStars",
   "description": "Deutsch → Englisch Lernspiel für Kinder",
-  "start_url": "./english_stars_v2.html",
+  "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "any",
