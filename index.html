@@ -29,6 +29,14 @@ html,body{
   user-select:none;
   overscroll-behavior:none;
 }
+/* Akku sparen: alle Animationen anhalten wenn User ~3 Min inaktiv */
+body.idle *,body.idle *::before,body.idle *::after{
+  animation-play-state:paused !important;
+}
+/* Akku sparen: wenn Browser-Tab im Hintergrund - alle Animationen aus */
+body.hidden *,body.hidden *::before,body.hidden *::after{
+  animation-play-state:paused !important;
+}
 input,textarea{
   -webkit-user-select:auto;
   user-select:auto;
@@ -94,6 +102,11 @@ h1{font-family:'Fredoka One',cursive;font-size:2.3rem;color:var(--orange);text-s
   cursor:pointer;box-shadow:0 3px 0 #ccc;transition:all .15s;display:inline-block;
 }
 .back-btn:hover{background:#e0e0e0;}
+/* Sticky-Back: bleibt oben sichtbar beim Scrollen (in Stats/VocabManager etc.) */
+.back-btn.sticky{
+  position:sticky;top:8px;z-index:300;align-self:flex-start;
+  background:#fff;box-shadow:0 3px 12px rgba(0,0,0,.15);
+}
 
 /* ── STATS SCREEN ── */
 .cat-progress-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:14px;}
@@ -653,7 +666,7 @@ body.in-game .mode-progress{display:block;}
 <div id="menu-screen" style="display:none;width:100%;max-width:580px;flex-direction:column;align-items:center;padding-bottom:90px;">
   <h1>⭐ English Stars</h1>
   <div class="subtitle">Deutsch → Englisch Lernspiel</div>
-  <div class="player-banner">
+  <div class="player-banner" onclick="showProfile()" style="cursor:pointer;">
     <div>
       <div class="player-name" id="menu-player-name">Hallo!</div>
       <div class="player-stats">
@@ -661,7 +674,7 @@ body.in-game .mode-progress{display:block;}
         <span class="pstat">⭐ <span id="menu-total">0</span> Pkt</span>
       </div>
     </div>
-    <button class="back-btn" style="margin:0" onclick="showStats()">📊 Fortschritt</button>
+    <button class="back-btn" style="margin:0" onclick="event.stopPropagation();showStats()">📊 Fortschritt</button>
   </div>
 
   <div style="display:flex;align-items:center;justify-content:space-between;width:100%;margin-bottom:8px;">
@@ -695,14 +708,85 @@ body.in-game .mode-progress{display:block;}
   <input type="file" id="import-file" accept=".json" style="display:none" onchange="importData(event)">
 </div>
 
-<!-- ═══ STATS SCREEN ═══ -->
-<div id="stats-screen" style="display:none;width:100%;max-width:540px;flex-direction:column;align-items:flex-start;">
-  <button class="back-btn" onclick="showMenu()">← Zurück</button>
-  <h1 style="width:100%;margin-bottom:4px">📊 Fortschritt</h1>
-  <p id="stats-deck-label" style="color:#888;font-size:.85rem;font-weight:700;margin-bottom:14px;width:100%;"></p>
+<!-- ═══ PROFILE SCREEN ═══ -->
+<div id="profile-screen" style="display:none;width:100%;max-width:540px;flex-direction:column;align-items:flex-start;">
+  <button class="back-btn sticky" onclick="showMenu()">← Zurück</button>
+  <h1 style="width:100%;margin-bottom:14px">👤 Profil</h1>
 
   <div class="stats-panel">
-    <h3 style="color:var(--orange)">🏆 Kategorien</h3>
+    <div style="display:flex;align-items:center;gap:14px;margin-bottom:14px;">
+      <div style="font-size:3rem;flex-shrink:0;">👤</div>
+      <div style="flex:1;min-width:0;">
+        <div id="prof-name" style="font-family:'Fredoka One',cursive;font-size:1.3rem;color:var(--text);"></div>
+        <div id="prof-since" style="font-size:.75rem;color:#888;font-weight:700;"></div>
+      </div>
+      <button onclick="editPlayerName()" style="font-family:'Fredoka One',cursive;font-size:.78rem;padding:6px 12px;background:#f5f5f5;color:#666;border:none;border-radius:50px;cursor:pointer;">✏️</button>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+      <div style="background:linear-gradient(135deg,#fff8e0,#fff0c0);padding:12px;border-radius:14px;text-align:center;">
+        <div style="font-size:1.6rem;">🏆</div>
+        <div id="prof-hs" style="font-family:'Fredoka One',cursive;font-size:1.4rem;color:#cc8800;">0</div>
+        <div style="font-size:.7rem;color:#888;font-weight:700;">Highscore</div>
+      </div>
+      <div style="background:linear-gradient(135deg,#fff0f6,#ffd6e0);padding:12px;border-radius:14px;text-align:center;">
+        <div style="font-size:1.6rem;">⭐</div>
+        <div id="prof-pts" style="font-family:'Fredoka One',cursive;font-size:1.4rem;color:#c0427a;">0</div>
+        <div style="font-size:.7rem;color:#888;font-weight:700;">Gesamtpunkte</div>
+      </div>
+      <div style="background:linear-gradient(135deg,#e6f7ff,#c0e8ff);padding:12px;border-radius:14px;text-align:center;">
+        <div style="font-size:1.6rem;">📚</div>
+        <div id="prof-decks" style="font-family:'Fredoka One',cursive;font-size:1.4rem;color:#0070b8;">0</div>
+        <div style="font-size:.7rem;color:#888;font-weight:700;">Sammlungen</div>
+      </div>
+      <div style="background:linear-gradient(135deg,#e8f8eb,#c0eccc);padding:12px;border-radius:14px;text-align:center;">
+        <div style="font-size:1.6rem;">✓</div>
+        <div id="prof-mastered" style="font-family:'Fredoka One',cursive;font-size:1.4rem;color:#2a7a35;">0</div>
+        <div style="font-size:.7rem;color:#888;font-weight:700;">Gemeisterte Wörter</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="stats-panel">
+    <h3 style="color:var(--purple);margin-top:0">📚 Deine Sammlungen</h3>
+    <div id="prof-decks-list" style="display:flex;flex-direction:column;gap:8px;"></div>
+  </div>
+
+  <div class="stats-panel">
+    <h3 style="color:var(--orange);margin-top:0">💾 Daten</h3>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button onclick="exportData()" style="flex:1;min-width:140px;font-family:'Fredoka One',cursive;font-size:.85rem;padding:10px;background:#4d96ff;color:#fff;border:none;border-radius:11px;cursor:pointer;box-shadow:0 3px 0 #2070cc;">💾 Exportieren</button>
+      <button onclick="document.getElementById('import-file').click()" style="flex:1;min-width:140px;font-family:'Fredoka One',cursive;font-size:.85rem;padding:10px;background:#ffa64d;color:#fff;border:none;border-radius:11px;cursor:pointer;box-shadow:0 3px 0 #cc7a20;">📂 Importieren</button>
+    </div>
+    <div style="font-size:.7rem;color:#888;font-weight:700;margin-top:8px;text-align:center;">
+      Sichere deine Daten regelmäßig – sie sind nur im Browser gespeichert
+    </div>
+  </div>
+</div>
+
+<!-- ═══ STATS SCREEN ═══ -->
+<div id="stats-screen" style="display:none;width:100%;max-width:540px;flex-direction:column;align-items:flex-start;">
+  <button class="back-btn sticky" onclick="showMenu()">← Zurück</button>
+  <h1 style="width:100%;margin-bottom:4px">📊 Profil & Fortschritt</h1>
+  <p id="stats-deck-label" style="color:#888;font-size:.85rem;font-weight:700;margin-bottom:14px;width:100%;"></p>
+
+  <!-- Profil-Panel -->
+  <div class="stats-panel">
+    <div style="display:flex;align-items:center;gap:14px;margin-bottom:10px;">
+      <div style="font-size:2.5rem;flex-shrink:0;">👤</div>
+      <div style="flex:1;min-width:0;">
+        <div id="profile-name" style="font-family:'Fredoka One',cursive;font-size:1.15rem;color:var(--text);"></div>
+        <div id="profile-meta" style="font-size:.78rem;color:#888;font-weight:700;"></div>
+      </div>
+      <button onclick="editPlayerName()" style="font-family:'Fredoka One',cursive;font-size:.78rem;padding:6px 12px;background:#f5f5f5;color:#666;border:none;border-radius:50px;cursor:pointer;">✏️ Name</button>
+    </div>
+    <div id="profile-decks-summary" style="display:flex;flex-direction:column;gap:6px;"></div>
+    <div style="font-size:.7rem;color:#aaa;margin-top:10px;font-weight:700;text-align:center;">
+      💾 Tipp: Nutze "Exportieren" im Hauptmenü um deine Daten zu sichern
+    </div>
+  </div>
+
+  <div class="stats-panel">
+    <h3 style="color:var(--orange)">🏆 Kategorien <span style="font-size:.7rem;color:#888;font-weight:600">(aktive Sammlung)</span></h3>
     <div class="cat-progress-grid" id="stats-cat-grid"></div>
   </div>
 
@@ -745,7 +829,7 @@ body.in-game .mode-progress{display:block;}
 
 <!-- ═══ SCAN SCREEN ═══ -->
 <div id="scan-screen" style="display:none;width:100%;max-width:580px;flex-direction:column;align-items:center;">
-  <button class="back-btn" onclick="showMenu()" style="align-self:flex-start;margin-bottom:14px;">← Zurück</button>
+  <button class="back-btn sticky" onclick="showMenu()" style="margin-bottom:14px;">← Zurück</button>
   <h1 style="margin-bottom:4px">📚 Vokabeln verwalten</h1>
   <p id="vm-deck-name" style="color:#888;font-size:.85rem;font-weight:700;margin-bottom:14px;text-align:center;"></p>
 
@@ -805,7 +889,7 @@ body.in-game .mode-progress{display:block;}
 
 <!-- ═══ REVIEW SCREEN ═══ -->
 <div id="review-screen" style="display:none;width:100%;max-width:580px;flex-direction:column;align-items:center;">
-  <button class="back-btn" onclick="showScreen('scan-screen')" style="align-self:flex-start;margin-bottom:14px;">← Zurück</button>
+  <button class="back-btn sticky" onclick="showScreen('scan-screen')" style="margin-bottom:14px;">← Zurück</button>
   <h1 style="margin-bottom:4px">✏️ Vokabeln prüfen</h1>
   <p style="color:#888;font-size:.9rem;font-weight:600;margin-bottom:14px;text-align:center;">Erkannte Wörter prüfen, ergänzen oder löschen</p>
 
@@ -884,7 +968,7 @@ body.in-game .mode-progress{display:block;}
   <span id="music-vol-lbl">50%</span>
   <input type="range" min="0" max="100" value="50" id="music-vol-slider" oninput="setMusicVolume(this.value/100)" />
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:.65rem;color:#bbb;font-weight:700;z-index:1000;pointer-events:none;">v3.23</div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:.65rem;color:#bbb;font-weight:700;z-index:1000;pointer-events:none;">v3.26</div>
 
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script>
@@ -1156,11 +1240,11 @@ window.addEventListener('load',()=>{
 });
 
 function showScreen(id){
-  ['apikey-screen','name-screen','menu-screen','game-screen','end-screen','stats-screen','scan-screen','review-screen'].forEach(s=>{
-    document.getElementById(s).style.display='none';
+  ['apikey-screen','name-screen','menu-screen','game-screen','end-screen','stats-screen','profile-screen','scan-screen','review-screen'].forEach(s=>{
+    const el=document.getElementById(s); if(el) el.style.display='none';
   });
   const el=document.getElementById(id);
-  el.style.display=['menu-screen','game-screen','stats-screen','scan-screen','review-screen'].includes(id)?'flex':'block';
+  el.style.display=['menu-screen','game-screen','stats-screen','profile-screen','scan-screen','review-screen'].includes(id)?'flex':'block';
   if(id==='game-screen') document.body.classList.add('in-game');
   else document.body.classList.remove('in-game');
   // Sticky Footer nur im Menü zeigen
@@ -1178,6 +1262,8 @@ function saveName(){
 //  MENU
 // ════════════════════════════════════════════════
 function showMenu(){
+  try{ releaseMicStream(); }catch(e){}
+  try{ if(window.speechSynthesis) window.speechSynthesis.cancel(); }catch(e){}
   hideFeedback();showScreen('menu-screen');
   document.getElementById('menu-player-name').textContent='Hallo, '+SD.playerName+'! 👋';
   document.getElementById('menu-highscore').textContent=SD.highscore;
@@ -1396,10 +1482,95 @@ function wrongDots(stat){
     '</span>';
 }
 
+function showProfile(){
+  showScreen('profile-screen');
+  const pn=document.getElementById('prof-name');
+  if(pn) pn.textContent=SD.playerName||'Spieler';
+  const ps=document.getElementById('prof-since');
+  if(ps){
+    const firstDeck=Object.values(SD.decks||{})[0];
+    if(firstDeck&&firstDeck.createdAt){
+      const d=new Date(firstDeck.createdAt);
+      ps.textContent='📅 Dabei seit '+d.toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:'numeric'});
+    } else ps.textContent='';
+  }
+  const ph=document.getElementById('prof-hs'); if(ph) ph.textContent=SD.highscore||0;
+  const pp=document.getElementById('prof-pts'); if(pp) pp.textContent=SD.totalPoints||0;
+  const deckIds=Object.keys(SD.decks||{});
+  const pd=document.getElementById('prof-decks'); if(pd) pd.textContent=deckIds.length;
+  // Gesamt gemeisterte Wörter über alle Decks zählen
+  let totalMastered=0;
+  deckIds.forEach(id=>{
+    const d=SD.decks[id];
+    const p=deckProgress(d);
+    totalMastered+=p.overallMastered||0;
+  });
+  const pm=document.getElementById('prof-mastered'); if(pm) pm.textContent=totalMastered;
+  // Deck-Liste rendern
+  const pdl=document.getElementById('prof-decks-list');
+  if(pdl){
+    if(deckIds.length===0){
+      pdl.innerHTML='<div style="font-size:.85rem;color:#999;text-align:center;padding:10px;">Keine Sammlungen vorhanden.</div>';
+    } else {
+      pdl.innerHTML=deckIds.map(id=>{
+        const d=SD.decks[id];
+        const p=deckProgress(d);
+        const isActive=id===SD.activeDeckId;
+        return `<div style="display:flex;align-items:center;gap:10px;padding:10px;background:${isActive?'rgba(168,108,219,.08)':'#f7f7f7'};border-radius:12px;">
+          <span style="font-size:1.4rem;">${isActive?'📖':'📕'}</span>
+          <div style="flex:1;min-width:0;">
+            <div style="font-family:'Fredoka One',cursive;font-size:.95rem;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(d.name)}</div>
+            <div style="font-size:.7rem;color:#888;font-weight:700;">${d.vocab.length} Wörter${isActive?' · aktiv':''}</div>
+          </div>
+          <div style="font-family:'Fredoka One',cursive;font-size:1.15rem;background:linear-gradient(135deg,var(--purple),var(--pink));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">${p.overallPct}%</div>
+        </div>`;
+      }).join('');
+    }
+  }
+}
+
+function editPlayerName(){
+  const cur=SD.playerName||'';
+  const nn=prompt('Dein Name:',cur);
+  if(nn===null) return;
+  const trimmed=nn.trim();
+  if(!trimmed) return;
+  SD.playerName=trimmed;
+  persist();
+  // Bleib im aktuellen Screen
+  const profEl=document.getElementById('profile-screen');
+  if(profEl && profEl.style.display!=='none') showProfile();
+  else showStats();
+}
+
 function showStats(){
   showScreen('stats-screen');
+  // Profil-Panel füllen
+  const pn=document.getElementById('profile-name');
+  const pm=document.getElementById('profile-meta');
+  const pds=document.getElementById('profile-decks-summary');
+  if(pn) pn.textContent=SD.playerName||'Spieler';
+  if(pm) pm.textContent='🏆 Highscore: '+SD.highscore+' · ⭐ '+SD.totalPoints+' Pkt gesamt';
+  if(pds){
+    const deckIds=Object.keys(SD.decks||{});
+    if(deckIds.length===0){
+      pds.innerHTML='<div style="font-size:.78rem;color:#999;text-align:center;padding:8px;">Keine Vokabelsammlungen vorhanden.</div>';
+    } else {
+      pds.innerHTML=deckIds.map(id=>{
+        const d=SD.decks[id];
+        const p=deckProgress(d);
+        const isActive=id===SD.activeDeckId;
+        return `<div style="display:flex;align-items:center;gap:10px;padding:6px 10px;background:${isActive?'rgba(168,108,219,.08)':'#f7f7f7'};border-radius:10px;font-size:.82rem;">
+          <span>${isActive?'📖':'📕'}</span>
+          <span style="flex:1;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(d.name)}</span>
+          <span style="font-size:.7rem;color:#888;">${d.vocab.length} W.</span>
+          <span style="font-family:'Fredoka One',cursive;color:var(--purple);">${p.overallPct}%</span>
+        </div>`;
+      }).join('');
+    }
+  }
   const dl=document.getElementById('stats-deck-label');
-  if(dl) dl.textContent='Sammlung: '+activeDeck().name+' · '+activeDeck().vocab.length+' Vokabeln';
+  if(dl) dl.textContent=SD.activeDeckId ? ('Aktive Sammlung: '+activeDeck().name+' · '+activeDeck().vocab.length+' Vokabeln') : 'Keine aktive Sammlung';
 
   const vocabMastered=VOCAB.filter(v=>{const s=SD.wordStats[v.de+'_mc'];return s&&Math.floor(s.asked||0)>=3&&s.correct/s.asked>=0.9;}).length;
   const spellMastered=VOCAB.filter(v=>{const s=SD.wordStats[v.de+'_sp'];return s&&Math.floor(s.asked||0)>=3&&s.correct/s.asked>=0.9;}).length;
@@ -1562,12 +1733,16 @@ function startGame(m){
 
 function confirmHome(){
   if(confirm('Zurück zum Menü?\nDer Lernfortschritt dieser Runde wird gespeichert.')){
-    saveProgress();hideFeedback();showMenu();
+    saveProgress();hideFeedback();
+    try{ releaseMicStream(); }catch(e){}
+    try{ if(window.speechSynthesis) window.speechSynthesis.cancel(); }catch(e){}
+    showMenu();
   }
 }
 
 function showQuestion(){
   answered=false;hideFeedback();
+  _spokenForQuestion=false;
   if(isSchnellModus){
     while(questionIndex<questionPool.length){
       const q=questionPool[questionIndex];
@@ -1673,23 +1848,93 @@ async function ensureMicStream(){
     return _micStream;
   }catch(e){return null;}
 }
+function releaseMicStream(){
+  if(_micStream){
+    try{ _micStream.getTracks().forEach(t=>t.stop()); }catch(e){}
+    _micStream=null;
+  }
+}
+
+let _ttsReady=false;
+let _ttsVoices=[];
+function _initTTS(){
+  if(!window.speechSynthesis) return;
+  _ttsVoices=window.speechSynthesis.getVoices();
+  if(_ttsVoices.length===0){
+    window.speechSynthesis.onvoiceschanged=()=>{
+      _ttsVoices=window.speechSynthesis.getVoices();
+      _ttsReady=true;
+    };
+  } else { _ttsReady=true; }
+  // Warmup: einen unhörbaren leeren Utterance abspielen damit die Engine geladen ist
+  try{
+    const warm=new SpeechSynthesisUtterance(' ');
+    warm.volume=0; warm.rate=10;
+    window.speechSynthesis.speak(warm);
+  }catch(e){}
+}
+// Beim ersten Klick irgendwo TTS initialisieren (Mobile braucht User-Geste)
+window.addEventListener('load',()=>{ _initTTS(); });
+
+// Akku-Sparmodus: Animationen pausieren wenn lange inaktiv
+let _idleTimer=null;
+function _resetIdle(){
+  document.body.classList.remove('idle');
+  if(_idleTimer) clearTimeout(_idleTimer);
+  _idleTimer=setTimeout(()=>{
+    document.body.classList.add('idle');
+    // Auch Musik nach 3 Min Inaktivität pausieren
+    try{ if(_musicAudio && !_musicAudio.paused) _musicAudio.pause(); }catch(e){}
+  }, 180000); // 3 Minuten
+}
+['click','touchstart','keydown','mousemove'].forEach(ev=>{
+  document.addEventListener(ev,_resetIdle,{passive:true});
+});
+_resetIdle();
+
+// Musik pausieren wenn Tab/App in Hintergrund geht, fortsetzen wenn aktiv
+document.addEventListener('visibilitychange',()=>{
+  if(document.hidden){
+    document.body.classList.add('hidden');
+    try{ if(_musicAudio && !_musicAudio.paused) _musicAudio.pause(); }catch(e){}
+    try{ if(window.speechSynthesis) window.speechSynthesis.cancel(); }catch(e){}
+  } else {
+    document.body.classList.remove('hidden');
+    _resetIdle(); // bei Rückkehr nicht idle
+    if(_musicOn){
+      try{ if(_musicAudio && _musicAudio.paused) _musicAudio.play().catch(()=>{}); }catch(e){}
+    }
+  }
+});
+// Beim Schließen alles aufräumen
+window.addEventListener('pagehide',()=>{
+  try{ if(_musicAudio) _musicAudio.pause(); }catch(e){}
+  try{ releaseMicStream(); }catch(e){}
+  try{ if(window.speechSynthesis) window.speechSynthesis.cancel(); }catch(e){}
+});
+document.addEventListener('click',function _ttsWarmup(){
+  _initTTS();
+  document.removeEventListener('click',_ttsWarmup);
+},{once:true});
 
 function speakWord(word, onDone){
-  if(!window.speechSynthesis) return;
+  if(!window.speechSynthesis||!word) return;
   window.speechSynthesis.cancel();
-  // Voices können verzögert laden
-  function doSpeak(){
-    const utt=new SpeechSynthesisUtterance(word);
-    utt.lang='en-US'; utt.rate=0.75; utt.pitch=1.0;
-    const voices=window.speechSynthesis.getVoices();
-    const preferred=voices.find(v=>v.lang==='en-US'&&(v.name.includes('Google US')||v.name.includes('Samantha')||v.name.includes('Alex')))
-      ||voices.find(v=>v.lang==='en-US')||voices.find(v=>v.lang.startsWith('en'));
-    if(preferred) utt.voice=preferred;
-    if(onDone) utt.onend=onDone;
-    window.speechSynthesis.speak(utt);
-  }
-  if(window.speechSynthesis.getVoices().length>0) doSpeak();
-  else{ window.speechSynthesis.onvoiceschanged=()=>{ window.speechSynthesis.onvoiceschanged=null; doSpeak(); }; }
+  if(_ttsVoices.length===0) _ttsVoices=window.speechSynthesis.getVoices();
+  const utt=new SpeechSynthesisUtterance(word);
+  utt.lang='en-US'; utt.rate=0.85; utt.pitch=1.0;
+  const preferred=_ttsVoices.find(v=>v.lang==='en-US'&&(v.name.includes('Google US')||v.name.includes('Samantha')||v.name.includes('Alex')))
+    ||_ttsVoices.find(v=>v.lang==='en-US')||_ttsVoices.find(v=>v.lang.startsWith('en'));
+  if(preferred) utt.voice=preferred;
+  if(onDone) utt.onend=onDone;
+  window.speechSynthesis.speak(utt);
+}
+// Wort pro Frage nur einmal automatisch vorlesen
+let _spokenForQuestion=false;
+function speakWordOnce(word){
+  if(_spokenForQuestion) return;
+  _spokenForQuestion=true;
+  speakWord(word);
 }
 
 // Audio-Visualizer
@@ -1711,8 +1956,12 @@ function startVisualizer(stream){
     const buf=new Uint8Array(_analyser.frequencyBinCount);
     const ctx=canvas.getContext('2d');
     const W=canvas.width, H=canvas.height;
-    function draw(){
+    let _lastDraw=0;
+    function draw(t){
       _vizAF=requestAnimationFrame(draw);
+      // Drosseln auf ~30fps (alle 33ms) - spart Akku
+      if(t-_lastDraw<33) return;
+      _lastDraw=t;
       _analyser.getByteFrequencyData(buf);
       ctx.clearRect(0,0,W,H);
       const barW=W/buf.length*2;
@@ -1867,10 +2116,9 @@ function startRecording(){
           result.style.display='block'; result.className='pronounce-result';
           result.textContent='❌ Mikrofon-Zugriff verweigert. Bitte in den Browser-Einstellungen erlauben.';
         } else if(e.error==='network'||e.error==='service-not-allowed'){
-          // Häufig auf Huawei ohne Google Mobile Services - Spracherkennung läuft auf Google-Servern
           result.style.display='block'; result.className='pronounce-result';
-          result.innerHTML='⚠️ Spracherkennung nicht verfügbar auf diesem Gerät.<br>'+
-            '<small style="opacity:.8">Häufig bei Huawei ohne Google Services. Tippe unten zur Selbst-Bewertung.</small>';
+          result.innerHTML='⚠️ Spracherkennung blockiert.<br>'+
+            '<small style="opacity:.8">Tipp: Bei Huawei → Samsung-Internet oder Firefox versuchen. Solange: bewerte selbst.</small>';
           showSelfRateButtons();
         } else if(e.error==='no-speech'){
           result.style.display='block'; result.className='pronounce-result heard';
@@ -1933,7 +2181,7 @@ function showSelfRateButtons(){
   `;
   card.appendChild(wrap);
   // Wort direkt vorlesen damit User vergleichen kann
-  setTimeout(()=>{ try{ speakWord(ans); }catch(e){} }, 200);
+  setTimeout(()=>{ try{ speakWordOnce(ans); }catch(e){} }, 200);
 }
 function selfRate(ok){
   if(answered) return;
@@ -2128,7 +2376,7 @@ function handleCorrect(){
     // Wort auf Englisch vorlesen (Wort fest gebunden damit schneller Klick auf Weiter es nicht durcheinander bringt)
     if(currentQ&&currentQ.answer){
       const w=currentQ.answer;
-      setTimeout(()=>{ try{ speakWord(w); }catch(e){} }, 150);
+      setTimeout(()=>{ try{ speakWordOnce(w); }catch(e){} }, 150);
     }
     if(streak===5||streak===10) spawnConfetti();
   }catch(e){
@@ -2180,7 +2428,7 @@ function handleWrong(){
     // Auch bei Falsch: richtiges Wort vorlesen (Wort fest gebunden)
     if(currentQ&&currentQ.answer){
       const w=currentQ.answer;
-      setTimeout(()=>{ try{ speakWord(w); }catch(e){} }, 200);
+      setTimeout(()=>{ try{ speakWordOnce(w); }catch(e){} }, 200);
     }
   }catch(e){
     console.error('handleWrong:',e);
@@ -2462,20 +2710,23 @@ let _pwaPrompt=null;
 if('serviceWorker' in navigator){
   window.addEventListener('load',()=>{
     navigator.serviceWorker.register('sw.js').then(reg=>{
-      // Bei jedem Seitenaufruf nach Updates suchen
-      reg.update().catch(()=>{});
-      // Wenn ein neuer SW installiert wird → automatisch aktivieren + reload
+      // Update-Check max. 1x pro Tag (spart Netzwerk + Akku)
+      try{
+        const last=parseInt(localStorage.getItem('es_sw_lastcheck')||'0',10);
+        if(Date.now()-last>24*3600*1000){
+          reg.update().catch(()=>{});
+          localStorage.setItem('es_sw_lastcheck',String(Date.now()));
+        }
+      }catch(e){}
       reg.addEventListener('updatefound',()=>{
         const newSW=reg.installing;
         if(!newSW) return;
         newSW.addEventListener('statechange',()=>{
           if(newSW.state==='installed' && navigator.serviceWorker.controller){
-            // Es gibt eine neue Version. Aktivieren + reload.
             newSW.postMessage({action:'skipWaiting'});
           }
         });
       });
-      // Wenn der neue SW aktiv wird, lädt die Seite neu
       let refreshing=false;
       navigator.serviceWorker.addEventListener('controllerchange',()=>{
         if(refreshing) return;
