@@ -989,7 +989,7 @@ body.in-game .mode-progress{display:block;}
   <span id="music-vol-lbl">50%</span>
   <input type="range" min="0" max="100" value="50" id="music-vol-slider" oninput="setMusicVolume(this.value/100)" />
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:.65rem;color:#bbb;font-weight:700;z-index:1000;pointer-events:none;">v3.40</div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:.65rem;color:#bbb;font-weight:700;z-index:1000;pointer-events:none;">v3.41</div>
 
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <!-- Vosk.js für Offline-Spracherkennung (Fallback wenn Web Speech API versagt) -->
@@ -1322,23 +1322,50 @@ async function startupSequence(){
   }
   showScreen('loading-screen');
 
-  // Schritt 1: Vokabeln + Decks sind schon via loadData() oben geladen, kurze Visuelle Pause
-  setProgress(10,'Vokabeln werden geladen…');
+  // Schritt 1: Vokabeln/Decks (sind schon via loadData() geladen)
+  setProgress(8,'Vokabeln werden geladen…');
   await new Promise(r=>setTimeout(r,200));
 
-  // Schritt 2: TTS-Stimmen vorab anfordern (Engine wachrütteln)
-  setProgress(25,'Sprachausgabe wird vorbereitet…');
+  // Schritt 2: Sprachausgabe (TTS-Stimmen)
+  setProgress(20,'Sprachausgabe wird vorbereitet…');
   try{ _initTTS(); }catch(e){}
-  await new Promise(r=>setTimeout(r,200));
+  // TTS-Voices brauchen manchmal Zeit zum Laden
+  let ttsTries=0;
+  while(_ttsVoices.length===0 && ttsTries<10){
+    await new Promise(r=>setTimeout(r,200));
+    try{ _ttsVoices=window.speechSynthesis.getVoices(); }catch(e){}
+    ttsTries++;
+  }
 
-  // Schritt 3: Musik-Tracks im Hintergrund entdecken (blockiert nicht)
-  setProgress(40,'Musik wird gesucht…');
-  _discoverTracks().catch(()=>{});
-  await new Promise(r=>setTimeout(r,300));
+  // Schritt 3: Sound-Effekte (Web Audio Context aufwärmen)
+  setProgress(30,'Sound-Effekte werden vorbereitet…');
+  try{ _sfx(); }catch(e){}
+  await new Promise(r=>setTimeout(r,150));
 
-  // Schritt 4: Vosk
+  // Schritt 4: Musik-Tracks finden + ersten Track vorladen
+  setProgress(45,'Musik wird geladen…');
+  try{
+    await _discoverTracks();
+    if(_musicTracks.length>0){
+      // Audio-Element vorbereiten und ersten Track laden (preload)
+      const a=_initAudio();
+      a.src=_trackUrl(_musicTracks[0]);
+      a.preload='auto';
+      // Warte bis Metadaten da sind (max 3 Sek)
+      await new Promise(resolve=>{
+        let done=false;
+        const finish=()=>{ if(!done){done=true; resolve();} };
+        a.addEventListener('loadedmetadata',finish,{once:true});
+        a.addEventListener('canplay',finish,{once:true});
+        setTimeout(finish,3000);
+      });
+      console.log('[Startup] Musik bereit:',_musicTracks[0]);
+    }
+  }catch(e){ console.warn('[Startup] Musik:',e); }
+
+  // Schritt 5: Vosk-Spracherkennung
   if(!alreadyLoaded){
-    setProgress(55,'Lade Offline-Spracherkennung (~40 MB)…');
+    setProgress(60,'Lade Offline-Spracherkennung (~40 MB)…');
     if(hint) hint.textContent='Nur beim ersten Start nötig. Bitte WLAN nutzen wenn möglich. Das kann 1–3 Minuten dauern.';
     try{
       if(window._voskLoad){
@@ -1349,20 +1376,32 @@ async function startupSequence(){
       }
     }catch(e){ console.warn('Vosk Load fehler beim Start:', e); }
   } else {
-    setProgress(70,'Initialisiere Spracherkennung…');
-    if(window._voskLoad && !window._voskModel) window._voskLoad().catch(()=>{});
-    await new Promise(r=>setTimeout(r,300));
+    setProgress(75,'Initialisiere Spracherkennung…');
+    // Auch beim warm-start auf Vosk warten falls noch nicht bereit
+    if(window._voskLoad){
+      try{ await window._voskLoad(); }catch(e){}
+    }
   }
 
-  // Schritt 5: Service Worker bereit machen
-  setProgress(90,'App wird gestartet…');
-  await new Promise(r=>setTimeout(r,250));
+  // Schritt 6: Mikrofon-Permission vorab anfragen (damit beim ersten Klick nicht Wartezeit)
+  setProgress(88,'Mikrofon wird vorbereitet…');
+  try{
+    if(navigator.mediaDevices && navigator.permissions){
+      // Nur prüfen, nicht erzwingen
+      await navigator.permissions.query({name:'microphone'}).catch(()=>{});
+    }
+  }catch(e){}
+  await new Promise(r=>setTimeout(r,150));
+
+  // Schritt 7: Service Worker / finale Initialisierung
+  setProgress(96,'Fast fertig…');
+  await new Promise(r=>setTimeout(r,200));
   setProgress(100,'Bereit!');
-  // Statt automatisch weitergehen: Button zeigen damit der User die App startet
-  // (notwendig für Musik-Autostart auf Mobile - braucht User-Gesture)
+
+  // Button zeigen damit User starten kann (User-Gesture für Musik auf Mobile nötig)
   const startBtn=document.getElementById('loading-start-btn');
   const hintEl=document.getElementById('loading-hint');
-  if(hintEl) hintEl.textContent='Tippe auf Loslegen um zu starten – dann läuft auch die Musik';
+  if(hintEl) hintEl.textContent='Alles bereit! Tippe auf Loslegen';
   if(startBtn) startBtn.style.display='inline-block';
 }
 
