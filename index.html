@@ -988,7 +988,7 @@ body.in-game .mode-progress{display:block;}
   <span id="music-vol-lbl">50%</span>
   <input type="range" min="0" max="100" value="50" id="music-vol-slider" oninput="setMusicVolume(this.value/100)" />
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:.65rem;color:#bbb;font-weight:700;z-index:1000;pointer-events:none;">v3.29 Vosk</div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:.65rem;color:#bbb;font-weight:700;z-index:1000;pointer-events:none;">v3.30</div>
 
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <!-- Vosk.js für Offline-Spracherkennung (Fallback wenn Web Speech API versagt) -->
@@ -2151,13 +2151,7 @@ function startRecording(){
   let _micHint=null;
   function setTG(){
     clearTG();
-    // Nach 2.5 Sek: Selbstbewertungs-Hint anzeigen (parallel - Mikrofon läuft weiter)
-    _micHint=setTimeout(()=>{
-      if(!answered && !document.getElementById('self-rate-wrap')){
-        showSelfRateButtons();
-      }
-    },2500);
-    // Nach 4 Sek: Komplett abbrechen
+    // Nach 5 Sek: Komplett abbrechen
     _micTimeout=setTimeout(()=>{
       if(!answered){
         clearTG(); stopVisualizer();
@@ -2166,14 +2160,19 @@ function startRecording(){
           result.textContent='🗣️ Erkannt: "'+_bestAlts[0]+'"';
           resetBtn();
           evaluateWithClaude(_bestAlts.join('|'),currentQ.answer);
+        } else if(window._voskModel || window._voskStatus==='loading'){
+          // Vosk-Fallback
+          result.style.display='block';result.className='pronounce-result';
+          result.textContent='⏳ Versuche Offline-Erkennung…';
+          startVoskRecognition(_micStream, currentQ.answer, result, document.getElementById('mic-btn'));
         } else {
           result.style.display='block';result.className='pronounce-result heard';
-          result.textContent='⏱️ Nichts erkannt – bewerte selbst oder versuchs nochmal';
+          result.textContent='⏱️ Nichts erkannt';
           resetBtn();
           showSelfRateButtons();
         }
       }
-    },4000);
+    },5000);
   }
 
   if(!navigator.mediaDevices){
@@ -2276,10 +2275,17 @@ function startRecording(){
             resetBtn();
             evaluateWithClaude(_lastAlts.join('|'), targetWord);
           } else {
-            resetBtn();
-            result.style.display='block'; result.className='pronounce-result heard';
-            result.textContent='🤷 Nichts erkannt – versuchs nochmal oder bewerte selbst';
-            showSelfRateButtons();
+            // Nichts erkannt - falls Vosk verfügbar, dieses versuchen
+            if(window._voskModel || window._voskStatus==='loading'){
+              result.style.display='block'; result.className='pronounce-result';
+              result.textContent='⏳ Versuche Offline-Erkennung…';
+              startVoskRecognition(stream, targetWord, result, btn);
+            } else {
+              resetBtn();
+              result.style.display='block'; result.className='pronounce-result heard';
+              result.textContent='🤷 Nichts erkannt';
+              showSelfRateButtons();
+            }
           }
         }
       };
@@ -2359,19 +2365,50 @@ function showSelfRateButtons(){
   const wrap=document.createElement('div');
   wrap.id='self-rate-wrap';
   wrap.style.cssText='margin-top:14px;display:flex;flex-direction:column;gap:10px;align-items:center;';
-  // Lösung NICHT mehr als Text zeigen - nur Anhören-Button
-  wrap.innerHTML=`
-    <button onclick="speakWord(${JSON.stringify(ans)})" style="font-family:'Fredoka One',cursive;font-size:.9rem;padding:10px 22px;background:#fff;color:var(--purple);border:2px solid var(--purple);border-radius:50px;cursor:pointer;">🔊 Lösung anhören</button>
-    <div style="font-size:.78rem;color:#666;text-align:center;">Hör dir die Aussprache an und entscheide:</div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;">
-      <button onclick="selfRate(true)" style="font-family:'Fredoka One',cursive;font-size:.9rem;padding:10px 18px;background:linear-gradient(135deg,#06d6a0,#3a9b45);color:#fff;border:none;border-radius:11px;cursor:pointer;box-shadow:0 4px 0 #2a7a35;">✓ Hatte ich richtig</button>
-      <button onclick="selfRate(false)" style="font-family:'Fredoka One',cursive;font-size:.9rem;padding:10px 18px;background:linear-gradient(135deg,#ff6b6b,#c0001a);color:#fff;border:none;border-radius:11px;cursor:pointer;box-shadow:0 4px 0 #800010;">✗ Daneben</button>
-      ${canRetry?'<button onclick="retryPronounce()" style="font-family:\'Fredoka One\',cursive;font-size:.9rem;padding:10px 18px;background:#ffa64d;color:#fff;border:none;border-radius:11px;cursor:pointer;box-shadow:0 4px 0 #cc7a20;">🔄 Nochmal</button>':''}
-    </div>
-    ${!canRetry?'<div style="font-size:.72rem;color:#999;">Versuche aufgebraucht.</div>':''}
-  `;
+  // Buttons als DOM-Elemente bauen statt innerHTML (sicher mit Sonderzeichen)
+  const listenBtn=document.createElement('button');
+  listenBtn.textContent='🔊 Lösung anhören';
+  listenBtn.style.cssText="font-family:'Fredoka One',cursive;font-size:.9rem;padding:10px 22px;background:#fff;color:var(--purple);border:2px solid var(--purple);border-radius:50px;cursor:pointer;";
+  listenBtn.onclick=()=>{ try{ speakWord(ans); }catch(e){} };
+
+  const hint=document.createElement('div');
+  hint.style.cssText='font-size:.78rem;color:#666;text-align:center;';
+  hint.textContent='Hör dir die Aussprache an und entscheide:';
+
+  const btnRow=document.createElement('div');
+  btnRow.style.cssText='display:flex;gap:8px;flex-wrap:wrap;justify-content:center;';
+
+  const okBtn=document.createElement('button');
+  okBtn.textContent='✓ Hatte ich richtig';
+  okBtn.style.cssText="font-family:'Fredoka One',cursive;font-size:.9rem;padding:10px 18px;background:linear-gradient(135deg,#06d6a0,#3a9b45);color:#fff;border:none;border-radius:11px;cursor:pointer;box-shadow:0 4px 0 #2a7a35;";
+  okBtn.onclick=()=>selfRate(true);
+  btnRow.appendChild(okBtn);
+
+  const noBtn=document.createElement('button');
+  noBtn.textContent='✗ Daneben';
+  noBtn.style.cssText="font-family:'Fredoka One',cursive;font-size:.9rem;padding:10px 18px;background:linear-gradient(135deg,#ff6b6b,#c0001a);color:#fff;border:none;border-radius:11px;cursor:pointer;box-shadow:0 4px 0 #800010;";
+  noBtn.onclick=()=>selfRate(false);
+  btnRow.appendChild(noBtn);
+
+  if(canRetry){
+    const retryBtn=document.createElement('button');
+    retryBtn.textContent='🔄 Nochmal';
+    retryBtn.style.cssText="font-family:'Fredoka One',cursive;font-size:.9rem;padding:10px 18px;background:#ffa64d;color:#fff;border:none;border-radius:11px;cursor:pointer;box-shadow:0 4px 0 #cc7a20;";
+    retryBtn.onclick=()=>retryPronounce();
+    btnRow.appendChild(retryBtn);
+  }
+
+  wrap.appendChild(listenBtn);
+  wrap.appendChild(hint);
+  wrap.appendChild(btnRow);
+  if(!canRetry){
+    const noMore=document.createElement('div');
+    noMore.style.cssText='font-size:.72rem;color:#999;';
+    noMore.textContent='Versuche aufgebraucht.';
+    wrap.appendChild(noMore);
+  }
   card.appendChild(wrap);
-  setTimeout(()=>{ try{ speakWordOnce(ans); }catch(e){} }, 200);
+  // Kein automatisches speakWord - User klickt selbst auf "Lösung anhören"
 }
 
 function retryPronounce(){
@@ -2760,18 +2797,36 @@ async function startMusic(){
 }
 // Synchrone Version für iOS - benutzt cached Tracks oder default
 function startMusicSync(){
-  if(_musicTracks.length===0){
-    // Fallback: nehme einfach den ersten erwarteten Track
-    _musicTracks=['HoliznaCC0 - 2  (jazz).mp3'];
-  }
   _musicOn=true;
   _musicErrorRetries=0;
+  // Wenn schon Tracks bekannt: einfach starten
+  // Wenn nicht: leeres Audio-Element erstellen, discoverTracks im Hintergrund laufen lassen
   const a=_initAudio();
-  if(!a.src) a.src=_trackUrl(_musicTracks[_musicIdx]);
-  try{
-    const p=a.play();
-    if(p) p.catch(()=>{ _musicOn=false; _setMusicBtns(false); });
-  }catch(e){ _musicOn=false; }
+  if(_musicTracks.length>0){
+    if(!a.src || a.error){
+      a.src=_trackUrl(_musicTracks[_musicIdx % _musicTracks.length]);
+    }
+    try{
+      const p=a.play();
+      if(p) p.catch(err=>{
+        console.warn('[Music] play failed:',err);
+        // Bei Autoplay-Fehler nicht ausschalten, User-Click hat noch keine User-Gesture ausgelöst
+      });
+    }catch(e){ console.warn('[Music] play exception:',e); }
+  } else {
+    // Tracks erst entdecken, dann starten
+    _discoverTracks().then(()=>{
+      if(!_musicOn) return; // User hat inzwischen ausgeschaltet
+      if(_musicTracks.length===0){
+        console.warn('[Music] Keine Tracks gefunden');
+        _musicOn=false; _setMusicBtns(false);
+        return;
+      }
+      a.src=_trackUrl(_musicTracks[0]);
+      const p=a.play();
+      if(p) p.catch(err=>console.warn('[Music] late play failed:',err));
+    }).catch(e=>console.warn('[Music] discover failed:',e));
+  }
 }
 function stopMusic(){
   _musicOn=false;
@@ -2796,19 +2851,10 @@ function toggleMusic(){
     stopMusic();_setMusicBtns(false);
     try{localStorage.setItem('es_music','0');}catch(e){}
   } else {
-    // Direkt synchron starten für iOS (User-Geste muss erhalten bleiben)
+    // Synchron starten für iOS-User-Gesture
     startMusicSync();
     _setMusicBtns(true);
     try{localStorage.setItem('es_music','1');}catch(e){}
-    // Im Hintergrund Track-Liste vervollständigen
-    _discoverTracks().then(()=>{
-      // Wenn die Default-Datei nicht existierte, neu starten
-      if(_musicAudio && _musicAudio.error && _musicTracks.length>0){
-        _musicIdx=0;
-        _musicAudio.src=_trackUrl(_musicTracks[0]);
-        _musicAudio.play().catch(()=>{});
-      }
-    });
   }
 }
 let _volPopupTimer=null;
