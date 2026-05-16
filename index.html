@@ -989,7 +989,7 @@ body.in-game .mode-progress{display:block;}
   <span id="music-vol-lbl">50%</span>
   <input type="range" min="0" max="100" value="50" id="music-vol-slider" oninput="setMusicVolume(this.value/100)" />
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:.65rem;color:#bbb;font-weight:700;z-index:1000;pointer-events:none;">v3.36</div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:.65rem;color:#bbb;font-weight:700;z-index:1000;pointer-events:none;">v3.37</div>
 
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <!-- Vosk.js für Offline-Spracherkennung (Fallback wenn Web Speech API versagt) -->
@@ -2175,18 +2175,57 @@ async function voskStart(onResult, onError){
       }
     });
     const src = ctx.createMediaStreamSource(stream);
+
+    // Pre-create _voskRec reference for closures
+    _voskRec = {rec, ctx, src, stream, vizAF:null};
+
+    // Visualizer direkt aus dem Vosk-Audio-Stream speisen
+    try{
+      const canvas=document.getElementById('viz-canvas');
+      if(canvas){
+        const vizAnalyser=ctx.createAnalyser();
+        vizAnalyser.fftSize=256;
+        vizAnalyser.smoothingTimeConstant=0.6;
+        const vizGain=ctx.createGain();
+        vizGain.gain.value=6.0;
+        src.connect(vizGain);
+        vizGain.connect(vizAnalyser);
+        const buf=new Uint8Array(vizAnalyser.frequencyBinCount);
+        const cctx=canvas.getContext('2d');
+        const W=canvas.width, H=canvas.height;
+        let _lastDraw=0;
+        function drawViz(t){
+          if(!_voskRec) return; // gestoppt
+          _voskRec.vizAF=requestAnimationFrame(drawViz);
+          if(t-_lastDraw<33) return;
+          _lastDraw=t;
+          vizAnalyser.getByteFrequencyData(buf);
+          cctx.clearRect(0,0,W,H);
+          const barW=W/buf.length*2;
+          let x=0;
+          for(let i=0;i<buf.length;i++){
+            const h=buf[i]/255*H;
+            const hue=200+buf[i]/2;
+            cctx.fillStyle=`hsl(${hue},90%,60%)`;
+            cctx.fillRect(x,H-h,barW-1,h);
+            x+=barW;
+          }
+        }
+        drawViz(0);
+      }
+    }catch(e){ console.warn('[Vosk] Visualizer-Fehler:',e); }
+
     const proc = ctx.createScriptProcessor(4096,1,1);
     proc.onaudioprocess = e=>{
       try{ rec.acceptWaveform(e.inputBuffer); }catch(err){ console.error('[Vosk] acceptWaveform:',err); }
     };
     src.connect(proc);
-    // WICHTIG: proc NICHT mit ctx.destination verbinden (sonst Mikrofon-Feedback hörbar)
-    // Aber ScriptProcessor braucht eine Verbindung um zu feuern - workaround mit gain
     const sink = ctx.createGain();
     sink.gain.value = 0;
     proc.connect(sink);
     sink.connect(ctx.destination);
-    _voskRec = {rec, ctx, src, proc, sink, stream};
+    _voskRec.proc = proc;
+    _voskRec.sink = sink;
     console.log('[Vosk] Aufnahme läuft, sampleRate:', ctx.sampleRate);
     return true;
   }catch(e){
@@ -2198,6 +2237,7 @@ async function voskStart(onResult, onError){
 
 function voskStop(){
   if(!_voskRec) return;
+  if(_voskRec.vizAF) try{ cancelAnimationFrame(_voskRec.vizAF); }catch(e){}
   try{ _voskRec.proc.disconnect(); }catch(e){}
   try{ _voskRec.sink.disconnect(); }catch(e){}
   try{ _voskRec.src.disconnect(); }catch(e){}
@@ -2205,6 +2245,9 @@ function voskStop(){
   try{ _voskRec.rec.remove(); }catch(e){}
   try{ if(_voskRec.stream) _voskRec.stream.getTracks().forEach(t=>t.stop()); }catch(e){}
   _voskRec=null;
+  // Canvas leeren
+  const canvas=document.getElementById('viz-canvas');
+  if(canvas){const cctx=canvas.getContext('2d');cctx.clearRect(0,0,canvas.width,canvas.height);}
 }
 
 function startRecording(){
@@ -2213,13 +2256,20 @@ function startRecording(){
   const result=document.getElementById('pronounce-result');
   if(!result) return;
 
-  // Wenn auf diesem Gerät Web Speech API schon mal versagt hat UND Vosk geladen ist → direkt Vosk
-  if(window._webSpeechFailed && (window._voskModel || window._voskStatus==='ready')){
-    console.log('[Recording] Web Speech zuvor versagt, nutze Vosk');
+  // Wenn Vosk geladen ist, IMMER Vosk nutzen (zuverlässiger + auf jedem Gerät gleich)
+  if(window._voskModel || window._voskStatus==='ready'){
+    console.log('[Recording] nutze Vosk (Offline-Erkennung)');
     result.style.display='block';
     result.className='pronounce-result';
-    result.textContent='🎤 Sprich jetzt – Offline-Erkennung…';
+    result.textContent='🎤 Sprich jetzt…';
     startVoskRecognition(currentQ.answer, result, btn);
+    return;
+  }
+  // Fallback: Web Speech API wenn Vosk noch lädt
+  if(window._webSpeechFailed){
+    result.style.display='block';
+    result.className='pronounce-result';
+    result.textContent='⏳ Spracherkennung lädt…';
     return;
   }
 
@@ -2400,7 +2450,7 @@ function startVoskRecognition(targetWord, resultEl, btn){
   function finishVosk(){
     if(answered) return;
     if(_voskTimeout){ clearTimeout(_voskTimeout); _voskTimeout=null; }
-    voskStop(); stopVisualizer();
+    voskStop();
     if(btn){ btn.className='mic-btn'; btn.disabled=false; btn.textContent='🎙️ Nochmal'; btn.onclick=startRecording; }
     if(_voskAlts.length>0){
       evaluateWithClaude(_voskAlts.join('|'), targetWord);
@@ -2410,11 +2460,15 @@ function startVoskRecognition(targetWord, resultEl, btn){
       showSelfRateButtons();
     }
   }
-  // Den existierenden Web-Speech-Mic-Stream freigeben (Konflikt mit Vosk-Stream sonst)
+  // Bestehende Audio-Resourcen aufräumen
   try{ releaseMicStream(); }catch(e){}
   try{ stopVisualizer(); }catch(e){}
   resultEl.style.display='block'; resultEl.className='pronounce-result';
-  resultEl.textContent='🎤 Sprich jetzt – Offline-Erkennung läuft…';
+  resultEl.textContent='🎤 Sprich jetzt…';
+  if(btn){
+    btn.className='mic-btn recording'; btn.textContent='⏹️ Stopp';
+    btn.onclick=()=>finishVosk();
+  }
   voskStart((text,isFinal)=>{
     if(!text||answered) return;
     const clean=text.toLowerCase().trim().replace(/[.,!?;:"]/g,'');
@@ -2429,16 +2483,12 @@ function startVoskRecognition(targetWord, resultEl, btn){
       finishVosk();
     }
   },(err)=>{
-    voskStop(); stopVisualizer();
+    voskStop();
     if(btn){ btn.className='mic-btn'; btn.disabled=false; btn.textContent='🎙️ Nochmal'; btn.onclick=startRecording; }
     resultEl.style.display='block'; resultEl.className='pronounce-result';
     resultEl.textContent='⚠️ Offline-Erkennung fehlgeschlagen';
     showSelfRateButtons();
   });
-  if(btn){
-    btn.className='mic-btn recording'; btn.textContent='⏹️ Stopp';
-    btn.onclick=()=>finishVosk();
-  }
   // Max 6 Sek Aufnahme
   _voskTimeout=setTimeout(()=>finishVosk(), 6000);
 }
