@@ -988,19 +988,32 @@ body.in-game .mode-progress{display:block;}
   <span id="music-vol-lbl">50%</span>
   <input type="range" min="0" max="100" value="50" id="music-vol-slider" oninput="setMusicVolume(this.value/100)" />
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:.65rem;color:#bbb;font-weight:700;z-index:1000;pointer-events:none;">v3.30</div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:.65rem;color:#bbb;font-weight:700;z-index:1000;pointer-events:none;">v3.32</div>
 
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <!-- Vosk.js für Offline-Spracherkennung (Fallback wenn Web Speech API versagt) -->
-<script type="module">
-  // Async laden - blockiert die App nicht
+<script src="https://cdn.jsdelivr.net/npm/vosk-browser@0.0.8/dist/vosk.js"></script>
+<script>
+  // Vosk wird via Script-Tag geladen → globales `Vosk`-Objekt
+  window._voskStatus = 'idle';
   window._voskLoad = async function(){
     if(window._voskModel) return window._voskModel;
+    if(window._voskStatus === 'loading'){
+      // Schon am Laden - warten
+      const start = Date.now();
+      while(window._voskStatus === 'loading' && Date.now()-start < 90000){
+        await new Promise(r=>setTimeout(r,200));
+      }
+      return window._voskModel;
+    }
+    if(typeof Vosk === 'undefined'){
+      console.warn('[Vosk] Library nicht verfügbar');
+      window._voskStatus = 'failed';
+      return null;
+    }
     try{
-      const Vosk = await import('https://cdn.jsdelivr.net/npm/vosk-browser@0.0.8/dist/vosk.js');
-      // Kleines englisches Modell (~40 MB) – wird via IndexedDB von Vosk gecacht
-      const modelUrl = 'https://ccoreilly.github.io/vosk-browser/models/vosk-model-small-en-us-0.15.tar.gz';
       window._voskStatus = 'loading';
+      const modelUrl = 'https://ccoreilly.github.io/vosk-browser/models/vosk-model-small-en-us-0.15.tar.gz';
       const model = await Vosk.createModel(modelUrl);
       window._voskModel = model;
       window._voskStatus = 'ready';
@@ -1278,6 +1291,26 @@ function updateKeyBadge(){
 loadData();
 
 async function startupSequence(){
+  // Service-Worker-Cache löschen damit immer die neueste App-Version geladen wird
+  // (außer Vosk-Modell, das ist in IndexedDB und bleibt automatisch)
+  try{
+    if('caches' in window){
+      const names = await caches.keys();
+      await Promise.all(names.map(n=>caches.delete(n)));
+    }
+  }catch(e){ console.warn('[Cache] Löschen fehlgeschlagen:',e); }
+
+  // LocalStorage-Aufräumen: alles bis auf User-Daten weg
+  const KEEP_KEYS = ['english_stars_v3','english_stars_v2','es_music','es_music_vol','es_apikey','es_vosk_loaded'];
+  try{
+    const toRemove=[];
+    for(let i=0;i<localStorage.length;i++){
+      const k=localStorage.key(i);
+      if(k && !KEEP_KEYS.includes(k)) toRemove.push(k);
+    }
+    toRemove.forEach(k=>{ try{ localStorage.removeItem(k); }catch(e){} });
+  }catch(e){}
+
   const alreadyLoaded = (()=>{ try{ return localStorage.getItem('es_vosk_loaded')==='1'; }catch(e){return false;} })();
   const bar=document.getElementById('loading-bar');
   const status=document.getElementById('loading-status');
@@ -1287,29 +1320,45 @@ async function startupSequence(){
     if(status) status.textContent=msg;
   }
   showScreen('loading-screen');
-  setProgress(15,'App wird geladen…');
-  // Kurze Verzögerung für UX
-  await new Promise(r=>setTimeout(r,300));
-  setProgress(35,'Datenbank wird vorbereitet…');
+
+  // Schritt 1: Vokabeln + Decks sind schon via loadData() oben geladen, kurze Visuelle Pause
+  setProgress(10,'Vokabeln werden geladen…');
   await new Promise(r=>setTimeout(r,200));
+
+  // Schritt 2: TTS-Stimmen vorab anfordern (Engine wachrütteln)
+  setProgress(25,'Sprachausgabe wird vorbereitet…');
+  try{ _initTTS(); }catch(e){}
+  await new Promise(r=>setTimeout(r,200));
+
+  // Schritt 3: Musik-Tracks im Hintergrund entdecken (blockiert nicht)
+  setProgress(40,'Musik wird gesucht…');
+  _discoverTracks().catch(()=>{});
+  await new Promise(r=>setTimeout(r,300));
+
+  // Schritt 4: Vosk
   if(!alreadyLoaded){
-    setProgress(50,'Lade Offline-Spracherkennung (~40 MB)…');
-    if(hint) hint.textContent='Nur beim ersten Start nötig. Bitte WLAN nutzen wenn möglich.';
+    setProgress(55,'Lade Offline-Spracherkennung (~40 MB)…');
+    if(hint) hint.textContent='Nur beim ersten Start nötig. Bitte WLAN nutzen wenn möglich. Das kann 1–3 Minuten dauern.';
     try{
       if(window._voskLoad){
         await window._voskLoad();
       }
-      try{ localStorage.setItem('es_vosk_loaded','1'); }catch(e){}
+      if(window._voskStatus==='ready'){
+        try{ localStorage.setItem('es_vosk_loaded','1'); }catch(e){}
+      }
     }catch(e){ console.warn('Vosk Load fehler beim Start:', e); }
   } else {
     setProgress(70,'Initialisiere Spracherkennung…');
-    // Im Hintergrund laden, blockiert nicht
     if(window._voskLoad && !window._voskModel) window._voskLoad().catch(()=>{});
+    await new Promise(r=>setTimeout(r,300));
   }
-  setProgress(95,'Fast fertig…');
+
+  // Schritt 5: Service Worker bereit machen
+  setProgress(90,'App wird gestartet…');
   await new Promise(r=>setTimeout(r,250));
   setProgress(100,'Bereit!');
-  await new Promise(r=>setTimeout(r,200));
+  await new Promise(r=>setTimeout(r,300));
+
   if(!SD.playerName) showScreen('name-screen');
   else showMenu();
 }
@@ -2075,22 +2124,26 @@ function stopVisualizer(){
 // ════════════════════════════════════════════════
 let _voskRec=null, _voskMediaSource=null;
 
-async function voskStart(stream, onResult, onError){
+async function voskStart(onResult, onError){
   try{
     if(!window._voskModel){
-      // Lade-Anzeige
-      if(window._voskStatus!=='loading'){
+      if(window._voskStatus!=='loading' && window._voskStatus!=='ready'){
         window._voskLoad();
       }
-      // Warten bis bereit (max 60 Sek beim ersten Mal wegen Modell-Download)
       const start=Date.now();
-      while(!window._voskModel && Date.now()-start<60000){
+      while(!window._voskModel && Date.now()-start<90000){
         if(window._voskStatus==='failed') throw new Error('Vosk-Lade-Fehler');
         await new Promise(r=>setTimeout(r,200));
       }
       if(!window._voskModel) throw new Error('Vosk timeout');
     }
-    const rec = new window._voskModel.KaldiRecognizer(48000);
+    // Eigener Mic-Stream mit 16 kHz - das ist was Vosk braucht
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video:false,
+      audio:{ echoCancellation:true, noiseSuppression:true, channelCount:1, sampleRate:16000 }
+    });
+    const ctx = new (window.AudioContext||window.webkitAudioContext)();
+    const rec = new window._voskModel.KaldiRecognizer(ctx.sampleRate);
     rec.setWords(true);
     rec.on('result', m=>{
       if(m && m.result && m.result.text) onResult(m.result.text, true);
@@ -2098,7 +2151,6 @@ async function voskStart(stream, onResult, onError){
     rec.on('partialresult', m=>{
       if(m && m.result && m.result.partial) onResult(m.result.partial, false);
     });
-    const ctx = new (window.AudioContext||window.webkitAudioContext)();
     const src = ctx.createMediaStreamSource(stream);
     const proc = ctx.createScriptProcessor(4096,1,1);
     proc.onaudioprocess = e=>{
@@ -2106,7 +2158,7 @@ async function voskStart(stream, onResult, onError){
     };
     src.connect(proc);
     proc.connect(ctx.destination);
-    _voskRec = {rec, ctx, src, proc};
+    _voskRec = {rec, ctx, src, proc, stream};
     return true;
   }catch(e){
     if(onError) onError(e);
@@ -2120,6 +2172,7 @@ function voskStop(){
   try{ _voskRec.src.disconnect(); }catch(e){}
   try{ _voskRec.ctx.close(); }catch(e){}
   try{ _voskRec.rec.remove(); }catch(e){}
+  try{ if(_voskRec.stream) _voskRec.stream.getTracks().forEach(t=>t.stop()); }catch(e){}
   _voskRec=null;
 }
 
@@ -2160,12 +2213,8 @@ function startRecording(){
           result.textContent='🗣️ Erkannt: "'+_bestAlts[0]+'"';
           resetBtn();
           evaluateWithClaude(_bestAlts.join('|'),currentQ.answer);
-        } else if(window._voskModel || window._voskStatus==='loading'){
-          // Vosk-Fallback
-          result.style.display='block';result.className='pronounce-result';
-          result.textContent='⏳ Versuche Offline-Erkennung…';
-          startVoskRecognition(_micStream, currentQ.answer, result, document.getElementById('mic-btn'));
         } else {
+          try{ releaseMicStream(); }catch(e){}
           result.style.display='block';result.className='pronounce-result heard';
           result.textContent='⏱️ Nichts erkannt';
           resetBtn();
@@ -2256,7 +2305,7 @@ function startRecording(){
           // Web Speech API nicht verfügbar → Vosk-Fallback versuchen
           result.style.display='block'; result.className='pronounce-result';
           result.innerHTML='⏳ Lade Offline-Spracherkennung…<br><small style="opacity:.8">(beim ersten Mal ~40 MB Download, danach offline)</small>';
-          startVoskRecognition(stream, targetWord, result, btn);
+          startVoskRecognition(targetWord, result, btn);
         } else if(e.error==='no-speech'){
           result.style.display='block'; result.className='pronounce-result heard';
           result.textContent='🤷 Nichts gehört';
@@ -2275,17 +2324,13 @@ function startRecording(){
             resetBtn();
             evaluateWithClaude(_lastAlts.join('|'), targetWord);
           } else {
-            // Nichts erkannt - falls Vosk verfügbar, dieses versuchen
-            if(window._voskModel || window._voskStatus==='loading'){
-              result.style.display='block'; result.className='pronounce-result';
-              result.textContent='⏳ Versuche Offline-Erkennung…';
-              startVoskRecognition(stream, targetWord, result, btn);
-            } else {
-              resetBtn();
-              result.style.display='block'; result.className='pronounce-result heard';
-              result.textContent='🤷 Nichts erkannt';
-              showSelfRateButtons();
-            }
+            // Nichts erkannt - Selbstbewertung anbieten
+            resetBtn();
+            // Mikrofon-Stream freigeben damit nichts klemmt
+            try{ releaseMicStream(); }catch(e){}
+            result.style.display='block'; result.className='pronounce-result heard';
+            result.textContent='🤷 Nichts erkannt';
+            showSelfRateButtons();
           }
         }
       };
@@ -2297,13 +2342,13 @@ function startRecording(){
       // Kein SpeechRecognition → direkt Vosk-Fallback versuchen
       result.style.display='block'; result.className='pronounce-result';
       result.innerHTML='⏳ Lade Offline-Spracherkennung…<br><small style="opacity:.8">(beim ersten Mal ~40 MB Download, danach offline)</small>';
-      startVoskRecognition(stream, currentQ.answer, result, btn);
+      startVoskRecognition(currentQ.answer, result, btn);
     }
   });
 }
 
 // Wrapper-Funktion: Vosk starten und Ergebnisse auswerten
-function startVoskRecognition(stream, targetWord, resultEl, btn){
+function startVoskRecognition(targetWord, resultEl, btn){
   let _voskAlts=[];
   let _voskTimeout=null;
   function finishVosk(){
@@ -2319,14 +2364,18 @@ function startVoskRecognition(stream, targetWord, resultEl, btn){
       showSelfRateButtons();
     }
   }
-  voskStart(stream,(text,isFinal)=>{
+  // Den existierenden Web-Speech-Mic-Stream freigeben (Konflikt mit Vosk-Stream sonst)
+  try{ releaseMicStream(); }catch(e){}
+  try{ stopVisualizer(); }catch(e){}
+  resultEl.style.display='block'; resultEl.className='pronounce-result';
+  resultEl.textContent='🎤 Sprich jetzt – Offline-Erkennung läuft…';
+  voskStart((text,isFinal)=>{
     if(!text||answered) return;
     const clean=text.toLowerCase().trim().replace(/[.,!?;:"]/g,'');
     if(!clean) return;
     if(_voskAlts.indexOf(clean)<0) _voskAlts.push(clean);
     resultEl.style.display='block'; resultEl.className='pronounce-result heard';
     resultEl.textContent='🗣️ Erkannt: "'+clean+'"';
-    // Schneller Abbruch wenn Target erkannt
     const tLow=targetWord.toLowerCase().replace(/^to /,'').trim();
     if(clean===tLow || clean.split(' ').includes(tLow)){
       finishVosk();
@@ -2340,13 +2389,12 @@ function startVoskRecognition(stream, targetWord, resultEl, btn){
     resultEl.textContent='⚠️ Offline-Erkennung fehlgeschlagen';
     showSelfRateButtons();
   });
-  // Visualizer + Recording-Button-Style
   if(btn){
     btn.className='mic-btn recording'; btn.textContent='⏹️ Stopp';
     btn.onclick=()=>finishVosk();
   }
-  // Max 5 Sek Aufnahme
-  _voskTimeout=setTimeout(()=>finishVosk(), 5000);
+  // Max 6 Sek Aufnahme
+  _voskTimeout=setTimeout(()=>finishVosk(), 6000);
 }
 
 // Selbst-Bewertungs-Buttons (Fallback wenn Spracherkennung versagt)
@@ -2369,7 +2417,13 @@ function showSelfRateButtons(){
   const listenBtn=document.createElement('button');
   listenBtn.textContent='🔊 Lösung anhören';
   listenBtn.style.cssText="font-family:'Fredoka One',cursive;font-size:.9rem;padding:10px 22px;background:#fff;color:var(--purple);border:2px solid var(--purple);border-radius:50px;cursor:pointer;";
-  listenBtn.onclick=()=>{ try{ speakWord(ans); }catch(e){} };
+  listenBtn.onclick=()=>{
+    // Audio aufräumen (Visualizer / Vosk / Mic) damit TTS nicht blockiert wird
+    try{ stopVisualizer(); }catch(e){}
+    try{ voskStop(); }catch(e){}
+    try{ releaseMicStream(); }catch(e){}
+    try{ speakWord(ans); }catch(e){}
+  };
 
   const hint=document.createElement('div');
   hint.style.cssText='font-size:.78rem;color:#666;text-align:center;';
