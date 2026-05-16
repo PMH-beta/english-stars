@@ -989,7 +989,7 @@ body.in-game .mode-progress{display:block;}
   <span id="music-vol-lbl">50%</span>
   <input type="range" min="0" max="100" value="50" id="music-vol-slider" oninput="setMusicVolume(this.value/100)" />
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:.65rem;color:#bbb;font-weight:700;z-index:1000;pointer-events:none;">v3.41</div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:.65rem;color:#bbb;font-weight:700;z-index:1000;pointer-events:none;">v3.42</div>
 
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <!-- Vosk.js für Offline-Spracherkennung (Fallback wenn Web Speech API versagt) -->
@@ -2558,8 +2558,16 @@ function showSelfRateButtons(){
   listenBtn.style.cssText="font-family:'Fredoka One',cursive;font-size:.9rem;padding:10px 22px;background:#fff;color:var(--purple);border:2px solid var(--purple);border-radius:50px;cursor:pointer;";
   listenBtn.onclick=()=>{
     try{ speakWord(ans); }catch(e){ console.warn('speakWord:',e); }
-    // Markieren dass das Wort schon vorgelesen wurde - verhindert Doppel-Aussprache nach selfRate
     _spokenForQuestion = true;
+    // Mikro-Button deaktivieren damit man nach Lösung-Anhören nicht nochmal aufnimmt (schummeln-Schutz)
+    const micBtn=document.getElementById('mic-btn');
+    if(micBtn){
+      micBtn.disabled=true;
+      micBtn.onclick=null;
+      micBtn.style.opacity='0.5';
+      micBtn.style.cursor='not-allowed';
+      micBtn.textContent='🔇 Lösung gehört';
+    }
   };
 
   const hint=document.createElement('div');
