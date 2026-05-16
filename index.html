@@ -989,7 +989,7 @@ body.in-game .mode-progress{display:block;}
   <span id="music-vol-lbl">50%</span>
   <input type="range" min="0" max="100" value="50" id="music-vol-slider" oninput="setMusicVolume(this.value/100)" />
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:.65rem;color:#bbb;font-weight:700;z-index:1000;pointer-events:none;">v3.42</div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:.65rem;color:#bbb;font-weight:700;z-index:1000;pointer-events:none;">v3.43</div>
 
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <!-- Vosk.js für Offline-Spracherkennung (Fallback wenn Web Speech API versagt) -->
@@ -2492,11 +2492,17 @@ function startRecording(){
 function startVoskRecognition(targetWord, resultEl, btn){
   let _voskAlts=[];
   let _voskTimeout=null;
+  // Tracker auf Window damit listenBtn diesen Timeout abräumen kann
+  window._activeVoskTimeout = null;
   function finishVosk(){
     if(answered) return;
     if(_voskTimeout){ clearTimeout(_voskTimeout); _voskTimeout=null; }
+    window._activeVoskTimeout = null;
     voskStop();
-    if(btn){ btn.className='mic-btn'; btn.disabled=false; btn.textContent='🎙️ Nochmal'; btn.onclick=startRecording; }
+    // Mic-Btn nur zurücksetzen wenn er nicht schon "🔇 Lösung gehört" zeigt
+    if(btn && !btn.disabled){
+      btn.className='mic-btn'; btn.textContent='🎙️ Nochmal'; btn.onclick=startRecording;
+    }
     if(_voskAlts.length>0){
       evaluateWithClaude(_voskAlts.join('|'), targetWord);
     } else {
@@ -2512,6 +2518,9 @@ function startVoskRecognition(targetWord, resultEl, btn){
   resultEl.textContent='🎤 Sprich jetzt…';
   if(btn){
     btn.className='mic-btn recording'; btn.textContent='⏹️ Stopp';
+    btn.disabled=false;
+    btn.style.opacity='';
+    btn.style.cursor='';
     btn.onclick=()=>finishVosk();
   }
   voskStart((text,isFinal)=>{
@@ -2529,13 +2538,13 @@ function startVoskRecognition(targetWord, resultEl, btn){
     }
   },(err)=>{
     voskStop();
-    if(btn){ btn.className='mic-btn'; btn.disabled=false; btn.textContent='🎙️ Nochmal'; btn.onclick=startRecording; }
+    if(btn && !btn.disabled){ btn.className='mic-btn'; btn.textContent='🎙️ Nochmal'; btn.onclick=startRecording; }
     resultEl.style.display='block'; resultEl.className='pronounce-result';
     resultEl.textContent='⚠️ Offline-Erkennung fehlgeschlagen';
     showSelfRateButtons();
   });
-  // Max 6 Sek Aufnahme
   _voskTimeout=setTimeout(()=>finishVosk(), 6000);
+  window._activeVoskTimeout = _voskTimeout;
 }
 
 // Selbst-Bewertungs-Buttons (Fallback wenn Spracherkennung versagt)
@@ -2557,15 +2566,20 @@ function showSelfRateButtons(){
   listenBtn.textContent='🔊 Lösung anhören';
   listenBtn.style.cssText="font-family:'Fredoka One',cursive;font-size:.9rem;padding:10px 22px;background:#fff;color:var(--purple);border:2px solid var(--purple);border-radius:50px;cursor:pointer;";
   listenBtn.onclick=()=>{
+    // Falls eine Vosk-Aufnahme noch läuft: stoppen
+    try{ voskStop(); }catch(e){}
+    if(window._activeVoskTimeout){ clearTimeout(window._activeVoskTimeout); window._activeVoskTimeout=null; }
+    try{ stopVisualizer(); }catch(e){}
     try{ speakWord(ans); }catch(e){ console.warn('speakWord:',e); }
     _spokenForQuestion = true;
-    // Mikro-Button deaktivieren damit man nach Lösung-Anhören nicht nochmal aufnimmt (schummeln-Schutz)
+    // Mikro-Button deaktivieren - kein erneutes Aufnehmen nach Lösung-Hören
     const micBtn=document.getElementById('mic-btn');
     if(micBtn){
       micBtn.disabled=true;
       micBtn.onclick=null;
       micBtn.style.opacity='0.5';
       micBtn.style.cursor='not-allowed';
+      micBtn.className='mic-btn';
       micBtn.textContent='🔇 Lösung gehört';
     }
   };
