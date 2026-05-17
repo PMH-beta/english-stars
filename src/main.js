@@ -24,6 +24,9 @@ preBoot().then(() => {
 import * as storage from './modules/storage.js';
 import * as config from './modules/config.js';
 window.ESModules = { storage, config };
+window.APP_VERSION = APP_VERSION;
+const _vb = document.getElementById('version-badge');
+if (_vb) _vb.textContent = APP_VERSION;
 
 // window.persist: liest window.SD als Fallback, kompatibel mit Legacy-Calls ohne Argument
 window.persist = (state = window.SD) => persist(state);
