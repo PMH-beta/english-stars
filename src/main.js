@@ -3,6 +3,7 @@
 import { APP_VERSION } from './modules/config.js';
 import { persist, loadData, freshData, cleanupStorage, clearSWCache } from './modules/storage.js';
 import { _initTTS, speakWord, speakWordOnce, ensureMicStream, releaseMicStream, startVisualizer, stopVisualizer, voskStart, voskStop, _shouldUseVosk, startRecording, startVoskRecognition } from './modules/speech.js';
+import { _trackUrl, _discoverTracks, _playNext, _initAudio, startMusic, startMusicSync, stopMusic, setMusicVolume, _setMusicBtns, toggleMusic, toggleVolPopup } from './modules/audio.js';
 
 console.log('[main] English Stars', APP_VERSION, 'startet…');
 
@@ -53,3 +54,16 @@ window.voskStop = voskStop;
 window._shouldUseVosk = _shouldUseVosk;
 window.startRecording = startRecording;
 window.startVoskRecognition = startVoskRecognition;
+
+// Musik via window für Legacy-Code
+window._trackUrl = _trackUrl;
+window._discoverTracks = _discoverTracks;
+window._playNext = _playNext;
+window._initAudio = _initAudio;
+window.startMusic = startMusic;
+window.startMusicSync = startMusicSync;
+window.stopMusic = stopMusic;
+window.setMusicVolume = setMusicVolume;
+window._setMusicBtns = _setMusicBtns;
+window.toggleMusic = toggleMusic;
+window.toggleVolPopup = toggleVolPopup;
