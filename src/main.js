@@ -2,6 +2,7 @@
 // Einstiegspunkt - lädt die Legacy-App und ergänzt sie schrittweise mit Modulen
 import { APP_VERSION } from './modules/config.js';
 import { persist, loadData, freshData, cleanupStorage, clearSWCache } from './modules/storage.js';
+import { _initTTS, speakWord, speakWordOnce } from './modules/speech.js';
 
 console.log('[main] English Stars', APP_VERSION, 'startet…');
 
@@ -30,3 +31,11 @@ window.persist = (state = window.SD) => persist(state);
 window.loadData = loadData;
 // window.freshData: liest window.DEFAULT_VOCAB als Standard-Vokabular
 window.freshData = () => freshData(window.DEFAULT_VOCAB || []);
+
+// TTS: shared state auf window (Index.html liest/schreibt diese direkt)
+window._ttsVoices = [];
+window._spokenForQuestion = false;
+// TTS-Funktionen via window für Legacy-Code
+window._initTTS = _initTTS;
+window.speakWord = speakWord;
+window.speakWordOnce = speakWordOnce;

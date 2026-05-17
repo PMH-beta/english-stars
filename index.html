@@ -1407,26 +1407,6 @@ function releaseMicStream(){
   }
 }
 
-let _ttsReady=false;
-let _ttsVoices=[];
-function _initTTS(){
-  if(!window.speechSynthesis) return;
-  _ttsVoices=window.speechSynthesis.getVoices();
-  if(_ttsVoices.length===0){
-    window.speechSynthesis.onvoiceschanged=()=>{
-      _ttsVoices=window.speechSynthesis.getVoices();
-      _ttsReady=true;
-    };
-  } else { _ttsReady=true; }
-  // Warmup: einen unhörbaren leeren Utterance abspielen damit die Engine geladen ist
-  try{
-    const warm=new SpeechSynthesisUtterance(' ');
-    warm.volume=0; warm.rate=10;
-    window.speechSynthesis.speak(warm);
-  }catch(e){}
-}
-// Beim ersten Klick irgendwo TTS initialisieren (Mobile braucht User-Geste)
-window.addEventListener('load',()=>{ _initTTS(); });
 
 // Akku-Sparmodus: Animationen pausieren wenn lange inaktiv
 let _idleTimer=null;
@@ -1464,30 +1444,6 @@ window.addEventListener('pagehide',()=>{
   try{ releaseMicStream(); }catch(e){}
   try{ if(window.speechSynthesis) window.speechSynthesis.cancel(); }catch(e){}
 });
-document.addEventListener('click',function _ttsWarmup(){
-  _initTTS();
-  document.removeEventListener('click',_ttsWarmup);
-},{once:true});
-
-function speakWord(word, onDone){
-  if(!window.speechSynthesis||!word) return;
-  window.speechSynthesis.cancel();
-  if(_ttsVoices.length===0) _ttsVoices=window.speechSynthesis.getVoices();
-  const utt=new SpeechSynthesisUtterance(word);
-  utt.lang='en-US'; utt.rate=0.85; utt.pitch=1.0;
-  const preferred=_ttsVoices.find(v=>v.lang==='en-US'&&(v.name.includes('Google US')||v.name.includes('Samantha')||v.name.includes('Alex')))
-    ||_ttsVoices.find(v=>v.lang==='en-US')||_ttsVoices.find(v=>v.lang.startsWith('en'));
-  if(preferred) utt.voice=preferred;
-  if(onDone) utt.onend=onDone;
-  window.speechSynthesis.speak(utt);
-}
-// Wort pro Frage nur einmal automatisch vorlesen
-let _spokenForQuestion=false;
-function speakWordOnce(word){
-  if(_spokenForQuestion) return;
-  _spokenForQuestion=true;
-  speakWord(word);
-}
 
 // Audio-Visualizer
 function startVisualizer(stream){
