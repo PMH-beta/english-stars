@@ -5,6 +5,7 @@ import { persist, loadData, freshData, cleanupStorage, clearSWCache } from './mo
 import { _initTTS, speakWord, speakWordOnce, ensureMicStream, releaseMicStream, startVisualizer, stopVisualizer, voskStart, voskStop, _shouldUseVosk, startRecording, startVoskRecognition } from './modules/speech.js';
 import { _trackUrl, _discoverTracks, _playNext, _initAudio, startMusic, startMusicSync, stopMusic, setMusicVolume, _setMusicBtns, toggleMusic, toggleVolPopup } from './modules/audio.js';
 import { effectivePct, isMastered, buildPool } from './modules/stats.js';
+import { syncMirrorFromActiveDeck, activeDeck, switchDeck, createDeck, deleteDeck, renameDeck, deckProgress, renderDecks, toggleDeck, activateDeck, startGameWithDeck, newDeckPrompt, renameDeckPrompt, confirmDeleteDeck, vmDeleteWord, vmAddManual } from './modules/decks.js';
 
 console.log('[main] English Stars', APP_VERSION, 'startet…');
 
@@ -60,6 +61,24 @@ window.startVoskRecognition = startVoskRecognition;
 window.effectivePct = effectivePct;
 window.isMastered = isMastered;
 window.buildPool = buildPool;
+
+// Decks via window für Legacy-Code
+window.syncMirrorFromActiveDeck = syncMirrorFromActiveDeck;
+window.activeDeck = activeDeck;
+window.switchDeck = switchDeck;
+window.createDeck = createDeck;
+window.deleteDeck = deleteDeck;
+window.renameDeck = renameDeck;
+window.deckProgress = deckProgress;
+window.renderDecks = renderDecks;
+window.toggleDeck = toggleDeck;
+window.activateDeck = activateDeck;
+window.startGameWithDeck = startGameWithDeck;
+window.newDeckPrompt = newDeckPrompt;
+window.renameDeckPrompt = renameDeckPrompt;
+window.confirmDeleteDeck = confirmDeleteDeck;
+window.vmDeleteWord = vmDeleteWord;
+window.vmAddManual = vmAddManual;
 
 // Musik via window für Legacy-Code
 window._trackUrl = _trackUrl;
