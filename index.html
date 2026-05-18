@@ -523,39 +523,8 @@ function toggleSchnell(){
   }
 }
 
-// ════════════════════════════════════════════════
-//  API KEY
-// ════════════════════════════════════════════════
-const API_KEY_SK='es_apikey';
-
-function getApiKey(){
-  try{return localStorage.getItem(API_KEY_SK)||'';}catch(e){return '';}
-}
-function saveApiKey(){
-  const v=document.getElementById('apikey-input').value.trim();
-  if(!v.startsWith('AIza')&&v.length<20){
-    document.getElementById('apikey-input').style.borderColor='var(--red)';
-    return;
-  }
-  try{localStorage.setItem(API_KEY_SK,v);}catch(e){}
-  if(!SD.playerName) showScreen('name-screen');
-  else showMenu();
-}
-function skipApiKey(){
-  if(!SD.playerName) showScreen('name-screen');
-  else showMenu();
-}
-function updateKeyBadge(){
-  const badge=document.getElementById('key-status-badge');
-  if(!badge) return;
-  if(getApiKey()){
-    badge.textContent='🔑 API-Key aktiv';
-    badge.style.color='#3a9b45';
-  } else {
-    badge.textContent='⚠️ Kein API-Key';
-    badge.style.color='var(--orange)';
-  }
-}
+// saveApiKey, skipApiKey → src/modules/ui.js
+// getApiKey (lokal), updateKeyBadge (toter Code) entfernt
 
 // ════════════════════════════════════════════════
 //  INIT
@@ -699,53 +668,14 @@ window.addEventListener('load',()=>{
   startupSequence();
 });
 
-function showScreen(id){
-  ['loading-screen','apikey-screen','name-screen','menu-screen','game-screen','end-screen','stats-screen','profile-screen','scan-screen','review-screen'].forEach(s=>{
-    const el=document.getElementById(s); if(el) el.style.display='none';
-  });
-  const el=document.getElementById(id);
-  el.style.display=['loading-screen','menu-screen','game-screen','stats-screen','profile-screen','scan-screen','review-screen'].includes(id)?'flex':'block';
-  if(id==='game-screen') document.body.classList.add('in-game');
-  else document.body.classList.remove('in-game');
-  // Sticky Footer nur im Menü zeigen
-  const ft=document.getElementById('menu-footer');
-  if(ft) ft.style.display = (id==='menu-screen') ? 'flex' : 'none';
-}
-
-function saveName(){
-  const v=document.getElementById('name-input').value.trim();
-  if(!v){document.getElementById('name-input').style.borderColor='var(--red)';return;}
-  SD.playerName=v;persist();showMenu();
-}
-
-// ════════════════════════════════════════════════
-//  MENU
-// ════════════════════════════════════════════════
-function showMenu(){
-  try{ releaseMicStream(); }catch(e){}
-  try{ if(window.speechSynthesis) window.speechSynthesis.cancel(); }catch(e){}
-  hideFeedback();showScreen('menu-screen');
-  document.getElementById('menu-player-name').textContent='Hallo, '+SD.playerName+'! 👋';
-  document.getElementById('menu-highscore').textContent=SD.highscore;
-  document.getElementById('menu-total').textContent=SD.totalPoints;
-  // Sticky Footer einblenden
-  const ft=document.getElementById('menu-footer'); if(ft) ft.style.display='flex';
-  renderDecks();
-}
+// showScreen, saveName, showMenu → src/modules/ui.js
 
 // deckProgress, renderDecks, renderModeSubBy, toggleDeck, activateDeck, startGameWithDeck,
 // newDeckPrompt, renameDeckPrompt, confirmDeleteDeck → src/modules/decks.js
 
 function escHtml(s){return(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');}
 
-function confirmReset(){
-  if(confirm('⚠️ Bist du dir wirklich sicher?\n\nALL dein Fortschritt wird gelöscht!')){
-    const name=SD.playerName;SD=freshData();SD.playerName=name;
-    syncMirrorFromActiveDeck();
-    persist();showMenu();
-    setTimeout(()=>alert('✅ Fortschritt zurückgesetzt!'),100);
-  }
-}
+// confirmReset → src/modules/ui.js
 
 function exportData(){
   const json=JSON.stringify(SD,null,2);
@@ -772,174 +702,7 @@ function importData(event){
   event.target.value='';
 }
 
-// ════════════════════════════════════════════════
-//  STATS SCREEN
-// ════════════════════════════════════════════════
-function wordStatus(stat,minAsked){
-  if(!stat||!stat.asked) return {cls:'ws-gray',label:'–',pct:0};
-  const asked=stat.asked, correct=stat.correct||0;
-  const pct=effectivePct(stat);  // gewichtet: jüngste Antworten zählen mehr
-  const display=Math.round(pct*100);
-  const flooredAsked=Math.floor(asked);
-  if(flooredAsked<minAsked){
-    const dots='·'.repeat(flooredAsked)+'<span style="opacity:.3">·</span>'.repeat(Math.max(0,minAsked-flooredAsked));
-    const smoothed=(correct+1)/(asked+2);
-    let cls='ws-gray';
-    if(smoothed>=0.85) cls='ws-green';
-    else if(smoothed>=0.4) cls='ws-yellow';
-    else if(asked>=1) cls='ws-red';
-    return {cls,label:dots,pct,provisional:true};
-  }
-  if(pct>=0.9) return {cls:'ws-green',label:'✓ '+display+'%',pct};
-  if(pct>=0.3) return {cls:'ws-yellow',label:'~ '+display+'%',pct};
-  return {cls:'ws-red',label:'✗ '+display+'%',pct};
-}
-function wrongDots(stat){
-  if(!stat||!stat.asked)return '<span style="color:#bbb;font-size:.75rem">–</span>';
-  const a=Math.floor(stat.asked||0);
-  const c=Math.floor(stat.correct||0);
-  const w=Math.floor(stat.wrong||0);
-  return '<span style="font-size:.75rem;color:#666;font-weight:700;white-space:nowrap;">'+
-    '<span style="color:#3a9b45">●</span>'+c+
-    ' <span style="color:#c0001a">●</span>'+w+
-    '</span>';
-}
-
-function showProfile(){
-  showScreen('profile-screen');
-  const pn=document.getElementById('prof-name');
-  if(pn) pn.textContent=SD.playerName||'Spieler';
-  const ps=document.getElementById('prof-since');
-  if(ps){
-    const firstDeck=Object.values(SD.decks||{})[0];
-    if(firstDeck&&firstDeck.createdAt){
-      const d=new Date(firstDeck.createdAt);
-      ps.textContent='📅 Dabei seit '+d.toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:'numeric'});
-    } else ps.textContent='';
-  }
-  const ph=document.getElementById('prof-hs'); if(ph) ph.textContent=SD.highscore||0;
-  const pp=document.getElementById('prof-pts'); if(pp) pp.textContent=SD.totalPoints||0;
-  const deckIds=Object.keys(SD.decks||{});
-  const pd=document.getElementById('prof-decks'); if(pd) pd.textContent=deckIds.length;
-  // Gesamt gemeisterte Wörter über alle Decks zählen
-  let totalMastered=0;
-  deckIds.forEach(id=>{
-    const d=SD.decks[id];
-    const p=deckProgress(d);
-    totalMastered+=p.overallMastered||0;
-  });
-  const pm=document.getElementById('prof-mastered'); if(pm) pm.textContent=totalMastered;
-  // Deck-Liste rendern
-  const pdl=document.getElementById('prof-decks-list');
-  if(pdl){
-    if(deckIds.length===0){
-      pdl.innerHTML='<div style="font-size:.85rem;color:#999;text-align:center;padding:10px;">Keine Sammlungen vorhanden.</div>';
-    } else {
-      pdl.innerHTML=deckIds.map(id=>{
-        const d=SD.decks[id];
-        const p=deckProgress(d);
-        const isActive=id===SD.activeDeckId;
-        return `<div style="display:flex;align-items:center;gap:10px;padding:10px;background:${isActive?'rgba(168,108,219,.08)':'#f7f7f7'};border-radius:12px;">
-          <span style="font-size:1.4rem;">${isActive?'📖':'📕'}</span>
-          <div style="flex:1;min-width:0;">
-            <div style="font-family:'Fredoka One',cursive;font-size:.95rem;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(d.name)}</div>
-            <div style="font-size:.7rem;color:#888;font-weight:700;">${d.vocab.length} Wörter${isActive?' · aktiv':''}</div>
-          </div>
-          <div style="font-family:'Fredoka One',cursive;font-size:1.15rem;background:linear-gradient(135deg,var(--purple),var(--pink));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">${p.overallPct}%</div>
-        </div>`;
-      }).join('');
-    }
-  }
-}
-
-function editPlayerName(){
-  const cur=SD.playerName||'';
-  const nn=prompt('Dein Name:',cur);
-  if(nn===null) return;
-  const trimmed=nn.trim();
-  if(!trimmed) return;
-  SD.playerName=trimmed;
-  persist();
-  // Bleib im aktuellen Screen
-  const profEl=document.getElementById('profile-screen');
-  if(profEl && profEl.style.display!=='none') showProfile();
-  else showStats();
-}
-
-function showStats(){
-  showScreen('stats-screen');
-  // Profil-Panel füllen
-  const pn=document.getElementById('profile-name');
-  const pm=document.getElementById('profile-meta');
-  const pds=document.getElementById('profile-decks-summary');
-  if(pn) pn.textContent=SD.playerName||'Spieler';
-  if(pm) pm.textContent='🏆 Highscore: '+SD.highscore+' · ⭐ '+SD.totalPoints+' Pkt gesamt';
-  if(pds){
-    const deckIds=Object.keys(SD.decks||{});
-    if(deckIds.length===0){
-      pds.innerHTML='<div style="font-size:.78rem;color:#999;text-align:center;padding:8px;">Keine Vokabelsammlungen vorhanden.</div>';
-    } else {
-      pds.innerHTML=deckIds.map(id=>{
-        const d=SD.decks[id];
-        const p=deckProgress(d);
-        const isActive=id===SD.activeDeckId;
-        return `<div style="display:flex;align-items:center;gap:10px;padding:6px 10px;background:${isActive?'rgba(168,108,219,.08)':'#f7f7f7'};border-radius:10px;font-size:.82rem;">
-          <span>${isActive?'📖':'📕'}</span>
-          <span style="flex:1;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(d.name)}</span>
-          <span style="font-size:.7rem;color:#888;">${d.vocab.length} W.</span>
-          <span style="font-family:'Fredoka One',cursive;color:var(--purple);">${p.overallPct}%</span>
-        </div>`;
-      }).join('');
-    }
-  }
-  const dl=document.getElementById('stats-deck-label');
-  if(dl) dl.textContent=SD.activeDeckId ? ('Aktive Sammlung: '+activeDeck().name+' · '+activeDeck().vocab.length+' Vokabeln') : 'Keine aktive Sammlung';
-
-  const vocabMastered=VOCAB.filter(v=>{const s=SD.wordStats[v.de+'_mc'];return s&&Math.floor(s.asked||0)>=3&&s.correct/s.asked>=0.9;}).length;
-  const spellMastered=VOCAB.filter(v=>{const s=SD.wordStats[v.de+'_sp'];return s&&Math.floor(s.asked||0)>=3&&s.correct/s.asked>=0.9;}).length;
-  const pronounceMastered=VOCAB.filter(v=>{const s=SD.wordStats[v.de+'_pr'];return s&&Math.floor(s.asked||0)>=3&&s.correct/s.asked>=0.9;}).length;
-
-  const catData=[
-    {label:'🔤 Vokabeln',    color:'var(--blue)',   done:vocabMastered,    total:VOCAB.length, cat:'vocab'},
-    {label:'✏️ Schreiben',   color:'var(--purple)', done:spellMastered,    total:VOCAB.length, cat:'spelling'},
-    {label:'🎙️ Aussprache', color:'var(--pink)',    done:pronounceMastered,total:VOCAB.length, cat:'pronounce'},
-    {label:'🎲 Mix',         color:'var(--green)',  done:Math.min(vocabMastered,spellMastered,pronounceMastered),total:VOCAB.length,cat:'mixed_vocab'},
-  ];
-  const grid=document.getElementById('stats-cat-grid');
-  grid.innerHTML=catData.map(c=>{
-    const pct=c.total?Math.round(c.done/c.total*100):0;
-    const p=SD.categoryProgress[c.cat]||{};
-    return `<div class="cat-card">
-      <div class="cat-card-title" style="color:${c.color}">${c.label}</div>
-      <div class="mini-bar-wrap"><div class="mini-bar" style="width:${pct}%;background:${c.color}"></div></div>
-      <div class="cat-stat-small">${c.done}/${c.total} gelernt · 🔥${p.bestStreak||0}</div>
-    </div>`;
-  }).join('');
-
-  // vocab table
-  const vt=document.getElementById('stats-vocab-table').querySelector('tbody');
-  vt.innerHTML=VOCAB.map(v=>{
-    const s=SD.wordStats[v.de+'_mc'];
-    const st=wordStatus(s,3);
-    return `<tr><td>${v.de}</td><td>${v.en}</td><td><span class="ws-badge ${st.cls}">${st.label}</span></td><td>${wrongDots(s)}</td></tr>`;
-  }).join('');
-
-  // spelling table
-  const st2=document.getElementById('stats-spelling-table').querySelector('tbody');
-  st2.innerHTML=VOCAB.map(v=>{
-    const s=SD.wordStats[v.de+'_sp'];
-    const st=wordStatus(s,3);
-    return `<tr><td>${v.de}</td><td>${v.en}</td><td><span class="ws-badge ${st.cls}">${st.label}</span></td><td>${wrongDots(s)}</td></tr>`;
-  }).join('');
-
-  // pronounce table
-  const pt=document.getElementById('stats-pronounce-table').querySelector('tbody');
-  pt.innerHTML=VOCAB.map(v=>{
-    const s=SD.wordStats[v.de+'_pr'];
-    const st=wordStatus(s,3);
-    return `<tr><td>${v.de}</td><td>${v.en}</td><td><span class="ws-badge ${st.cls}">${st.label}</span></td><td>${wrongDots(s)}</td></tr>`;
-  }).join('');
-}
+// wordStatus, wrongDots, showProfile, editPlayerName, showStats → src/modules/ui.js
 
 // ════════════════════════════════════════════════
 //  QUESTION BUILDERS
@@ -1669,32 +1432,7 @@ function updateModeProgress(animate){
   }
   _lastModePct=pct;
 }
-function showFeedback(ok,text,sub){
-  const fb=document.getElementById('feedback');
-  fb.className='feedback show '+(ok?'success':'error');
-  document.getElementById('fb-text').textContent=text;
-  document.getElementById('fb-sub').textContent=sub;
-  // Bei falscher Aussprache: "Anhören"-Button einblenden
-  let speakEl=document.getElementById('fb-speak');
-  if(!ok&&currentQ&&currentQ.type==='pronounce'){
-    if(!speakEl){
-      speakEl=document.createElement('button');
-      speakEl.id='fb-speak';
-      speakEl.className='speak-btn';
-      speakEl.style.marginTop='6px';
-      speakEl.textContent='🔊 Richtige Aussprache anhören';
-      const left=document.querySelector('.feedback-left');
-      if(left)left.appendChild(speakEl);
-    }
-    speakEl.onclick=()=>speakWord(currentQ.answer);
-    speakEl.style.display='inline-flex';
-  } else if(speakEl){
-    speakEl.style.display='none';
-  }
-  // Stoppe Visualizer und laufende Aufnahme
-  stopVisualizer();
-}
-function hideFeedback(){document.getElementById('feedback').className='feedback';}
+// showFeedback, hideFeedback → src/modules/ui.js
 function nextQuestion(){
   // Laufende Aussprache stoppen wenn User weiterklickt
   try{ if(window.speechSynthesis) window.speechSynthesis.cancel(); }catch(e){}

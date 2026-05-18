@@ -6,6 +6,7 @@ import { _initTTS, speakWord, speakWordOnce, ensureMicStream, releaseMicStream, 
 import { _trackUrl, _discoverTracks, _playNext, _initAudio, startMusic, startMusicSync, stopMusic, setMusicVolume, _setMusicBtns, toggleMusic, toggleVolPopup } from './modules/audio.js';
 import { effectivePct, isMastered, buildPool } from './modules/stats.js';
 import { syncMirrorFromActiveDeck, activeDeck, switchDeck, createDeck, deleteDeck, renameDeck, deckProgress, renderDecks, toggleDeck, activateDeck, startGameWithDeck, newDeckPrompt, renameDeckPrompt, confirmDeleteDeck, vmDeleteWord, vmAddManual } from './modules/decks.js';
+import { showScreen, saveName, showMenu, saveApiKey, skipApiKey, showProfile, editPlayerName, showStats, confirmReset, showFeedback, hideFeedback } from './modules/ui.js';
 
 console.log('[main] English Stars', APP_VERSION, 'startet…');
 
@@ -81,6 +82,19 @@ window.renameDeckPrompt = renameDeckPrompt;
 window.confirmDeleteDeck = confirmDeleteDeck;
 window.vmDeleteWord = vmDeleteWord;
 window.vmAddManual = vmAddManual;
+
+// UI via window für Legacy-Code
+window.showScreen = showScreen;
+window.saveName = saveName;
+window.showMenu = showMenu;
+window.saveApiKey = saveApiKey;
+window.skipApiKey = skipApiKey;
+window.showProfile = showProfile;
+window.editPlayerName = editPlayerName;
+window.showStats = showStats;
+window.confirmReset = confirmReset;
+window.showFeedback = showFeedback;
+window.hideFeedback = hideFeedback;
 
 // Musik via window für Legacy-Code
 window._trackUrl = _trackUrl;
