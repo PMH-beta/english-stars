@@ -3,14 +3,21 @@ import { persist } from './storage.js';
 import { effectivePct } from './stats.js';
 import { syncMirrorFromActiveDeck, activeDeck, deckProgress, renderDecks } from './decks.js';
 import { releaseMicStream, stopVisualizer, speakWord } from './speech.js';
+import { signIn, signUp, signOut, resendConfirmation } from './auth.js';
 
 const API_KEY_SK = 'es_apikey';
+
+// ────────────────────────────────────────────────
+//  AUTH UI STATE
+// ────────────────────────────────────────────────
+let _authMode = 'login';
+let _pendingConfirmEmail = '';
 
 // ────────────────────────────────────────────────
 //  SCREEN ROUTING
 // ────────────────────────────────────────────────
 export function showScreen(id) {
-  ['loading-screen','apikey-screen','name-screen','menu-screen','game-screen','end-screen','stats-screen','profile-screen','scan-screen','review-screen'].forEach(s => {
+  ['loading-screen','apikey-screen','name-screen','menu-screen','game-screen','end-screen','stats-screen','profile-screen','scan-screen','review-screen','auth-screen','email-confirm-screen'].forEach(s => {
     const el = document.getElementById(s); if (el) el.style.display = 'none';
   });
   const el = document.getElementById(id);
@@ -110,6 +117,32 @@ export function showProfile() {
           <div style="font-family:'Fredoka One',cursive;font-size:1.15rem;background:linear-gradient(135deg,var(--purple),var(--pink));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">${p.overallPct}%</div>
         </div>`;
       }).join('');
+    }
+  }
+
+  const cloudSection = document.getElementById('prof-cloud-section');
+  if (cloudSection) {
+    const user = window.currentUser;
+    if (user) {
+      cloudSection.innerHTML = `
+        <h3 style="color:var(--purple);margin-top:0">☁️ Cloud-Konto</h3>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:.82rem;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${user.email}</div>
+            <div style="font-size:.72rem;color:#2a7a35;font-weight:700;">Fortschritt wird synchronisiert</div>
+          </div>
+          <button onclick="authLogout()" style="font-family:'Fredoka One',cursive;font-size:.78rem;padding:6px 14px;background:#ffd0d0;color:#c0001a;border:none;border-radius:50px;cursor:pointer;white-space:nowrap;flex-shrink:0;">Abmelden</button>
+        </div>`;
+    } else {
+      cloudSection.innerHTML = `
+        <h3 style="color:#888;margin-top:0">☁️ Cloud-Konto</h3>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <div style="flex:1;">
+            <div style="font-size:.82rem;font-weight:700;color:#888;">Nicht eingeloggt</div>
+            <div style="font-size:.72rem;color:#aaa;font-weight:700;">Speichere deinen Fortschritt auf allen Geräten</div>
+          </div>
+          <button onclick="showAuth()" style="font-family:'Fredoka One',cursive;font-size:.78rem;padding:8px 14px;background:linear-gradient(135deg,var(--purple),var(--pink));color:#fff;border:none;border-radius:50px;cursor:pointer;box-shadow:0 3px 0 #7a4ba8;white-space:nowrap;flex-shrink:0;">☁️ Anmelden</button>
+        </div>`;
     }
   }
 }
@@ -312,4 +345,116 @@ export function importData(event) {
   };
   reader.readAsText(file);
   event.target.value = '';
+}
+
+// ────────────────────────────────────────────────
+//  AUTH UI
+// ────────────────────────────────────────────────
+
+export function showAuth() {
+  _authMode = 'login';
+  _pendingConfirmEmail = '';
+  const emailEl = document.getElementById('auth-email');
+  const pwEl = document.getElementById('auth-password');
+  const errEl = document.getElementById('auth-error');
+  if (emailEl) emailEl.value = '';
+  if (pwEl) pwEl.value = '';
+  if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
+  _updateAuthModeUI();
+  showScreen('auth-screen');
+}
+
+function _updateAuthModeUI() {
+  const title = document.getElementById('auth-title');
+  const submitBtn = document.getElementById('auth-submit-btn');
+  const toggleBtn = document.getElementById('auth-toggle-btn');
+  const isLogin = _authMode === 'login';
+  if (title) title.textContent = isLogin ? 'Anmelden' : 'Konto erstellen';
+  if (submitBtn) submitBtn.textContent = isLogin ? 'Anmelden' : 'Registrieren';
+  if (toggleBtn) toggleBtn.textContent = isLogin
+    ? 'Noch kein Konto? Registrieren'
+    : 'Schon registriert? Anmelden';
+}
+
+export function authToggleMode() {
+  _authMode = _authMode === 'login' ? 'signup' : 'login';
+  const errEl = document.getElementById('auth-error');
+  if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
+  _updateAuthModeUI();
+}
+
+export async function authSubmit() {
+  const emailEl = document.getElementById('auth-email');
+  const pwEl = document.getElementById('auth-password');
+  const submitBtn = document.getElementById('auth-submit-btn');
+  const email = emailEl ? emailEl.value.trim() : '';
+  const password = pwEl ? pwEl.value : '';
+
+  if (!email || !password) {
+    _setAuthError('Bitte E-Mail und Passwort eingeben.');
+    return;
+  }
+
+  submitBtn.disabled = true;
+  submitBtn.textContent = '…';
+
+  const result = _authMode === 'login'
+    ? await signIn(email, password)
+    : await signUp(email, password);
+
+  submitBtn.disabled = false;
+  _updateAuthModeUI();
+
+  if (result.error) {
+    _setAuthError(result.error);
+    return;
+  }
+
+  // signup: immer Email-Bestätigung zeigen (Email-Confirm ist AN)
+  if (_authMode === 'signup') {
+    _pendingConfirmEmail = email;
+    const display = document.getElementById('confirm-email-display');
+    if (display) display.textContent = email;
+    const msg = document.getElementById('confirm-message');
+    if (msg) { msg.style.display = 'none'; msg.textContent = ''; }
+    showScreen('email-confirm-screen');
+    return;
+  }
+
+  // login erfolgreich — Commit 2 ergänzt handleLogin(); vorerst zum Menü
+  showMenu();
+}
+
+function _setAuthError(msg) {
+  const errEl = document.getElementById('auth-error');
+  if (!errEl) return;
+  errEl.textContent = msg;
+  errEl.style.display = 'block';
+}
+
+export async function authResend() {
+  if (!_pendingConfirmEmail) return;
+  const btn = document.getElementById('confirm-resend-btn');
+  const msgEl = document.getElementById('confirm-message');
+  if (btn) { btn.disabled = true; btn.textContent = '…'; }
+  const err = await resendConfirmation(_pendingConfirmEmail);
+  if (btn) { btn.disabled = false; btn.textContent = 'Erneut senden'; }
+  if (msgEl) {
+    msgEl.style.display = 'block';
+    if (err) {
+      msgEl.textContent = err;
+      msgEl.style.cssText = 'display:block;font-size:.82rem;font-weight:700;text-align:center;max-width:300px;margin-bottom:12px;padding:8px 12px;border-radius:10px;background:#fff0f0;color:#c0001a;';
+    } else {
+      msgEl.textContent = 'Mail wurde erneut gesendet!';
+      msgEl.style.cssText = 'display:block;font-size:.82rem;font-weight:700;text-align:center;max-width:300px;margin-bottom:12px;padding:8px 12px;border-radius:10px;background:#f0fff4;color:#2a7a35;';
+    }
+  }
+}
+
+export async function authLogout() {
+  await signOut();
+  // Commit 4 ergänzt: LS leeren, freshData(), pendingSync leeren
+  // Vorerst: currentUser löschen und zum Menü navigieren
+  window.currentUser = null;
+  showMenu();
 }

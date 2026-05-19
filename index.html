@@ -40,6 +40,48 @@
   <button class="big-btn green center" onclick="skipApiKey()">Los geht's! 🚀</button>
 </div>
 
+<!-- ═══ AUTH SCREEN ═══ -->
+<div id="auth-screen" class="screen" style="display:none">
+  <button class="back-btn sticky" onclick="showProfile()">← Zurück</button>
+  <span class="emoji-big">☁️</span>
+  <h2 id="auth-title">Anmelden</h2>
+  <p style="color:#888;font-size:.85rem;text-align:center;max-width:300px;margin-bottom:18px;">Lerne auf allen Geräten – dein Fortschritt wird sicher in der Cloud gespeichert.</p>
+  <input id="auth-email" type="email" placeholder="E-Mail-Adresse" autocomplete="email"
+    style="width:100%;max-width:300px;padding:12px 16px;border:2px solid #ddd;border-radius:12px;font-size:.95rem;font-family:inherit;margin-bottom:10px;box-sizing:border-box;"
+    onkeydown="if(event.key==='Enter')document.getElementById('auth-password').focus()">
+  <input id="auth-password" type="password" placeholder="Passwort (mind. 6 Zeichen)" autocomplete="current-password"
+    style="width:100%;max-width:300px;padding:12px 16px;border:2px solid #ddd;border-radius:12px;font-size:.95rem;font-family:inherit;margin-bottom:10px;box-sizing:border-box;"
+    onkeydown="if(event.key==='Enter')authSubmit()">
+  <div id="auth-error" style="display:none;color:#c0001a;font-size:.82rem;font-weight:700;text-align:center;max-width:300px;margin-bottom:10px;padding:8px 12px;background:#fff0f0;border-radius:10px;"></div>
+  <button id="auth-submit-btn" onclick="authSubmit()" class="big-btn blue center" style="max-width:300px;width:100%;">Anmelden</button>
+  <button id="auth-toggle-btn" onclick="authToggleMode()"
+    style="margin-top:14px;background:none;border:none;color:var(--purple);font-family:'Fredoka One',cursive;font-size:.88rem;cursor:pointer;text-decoration:underline;">
+    Noch kein Konto? Registrieren
+  </button>
+</div>
+
+<!-- ═══ EMAIL CONFIRM SCREEN ═══ -->
+<div id="email-confirm-screen" class="screen" style="display:none">
+  <span class="emoji-big">📧</span>
+  <h2>E-Mail bestätigen</h2>
+  <p style="color:#888;font-size:.85rem;text-align:center;max-width:300px;margin-bottom:6px;">
+    Wir haben eine Bestätigungsmail an
+  </p>
+  <p id="confirm-email-display" style="font-family:'Fredoka One',cursive;font-size:.95rem;color:var(--purple);text-align:center;max-width:300px;margin-bottom:14px;word-break:break-all;"></p>
+  <p style="color:#888;font-size:.82rem;text-align:center;max-width:300px;margin-bottom:20px;">
+    gesendet. Bitte klicke auf den Link in der Mail, dann kannst du dich anmelden.
+  </p>
+  <div id="confirm-message" style="display:none;font-size:.82rem;font-weight:700;text-align:center;max-width:300px;margin-bottom:12px;padding:8px 12px;border-radius:10px;"></div>
+  <button id="confirm-resend-btn" onclick="authResend()"
+    class="big-btn purple center" style="max-width:300px;width:100%;margin-bottom:10px;">
+    Erneut senden
+  </button>
+  <button onclick="showAuth()"
+    style="background:none;border:none;color:#888;font-family:'Fredoka One',cursive;font-size:.85rem;cursor:pointer;text-decoration:underline;">
+    Zurück zum Login
+  </button>
+</div>
+
 <!-- ═══ NAME SCREEN ═══ -->
 <div id="name-screen" class="screen" style="display:none">
   <span class="emoji-big">👋</span>
@@ -134,6 +176,10 @@
   <div class="stats-panel">
     <h3 style="color:var(--purple);margin-top:0">📚 Deine Sammlungen</h3>
     <div id="prof-decks-list" style="display:flex;flex-direction:column;gap:8px;"></div>
+  </div>
+
+  <div class="stats-panel" id="prof-cloud-section">
+    <!-- gefüllt durch showProfile() -->
   </div>
 
   <div class="stats-panel">

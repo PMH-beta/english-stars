@@ -7,10 +7,11 @@ import { _trackUrl, _discoverTracks, _playNext, _initAudio, startMusic, startMus
 import { effectivePct, isMastered } from './modules/stats.js';
 import { buildPool, toggleSchnell, startGame, confirmHome, nextQuestion, restartSame, checkMC, submitType, showSelfRateButtons, retryPronounce, evaluateWithClaude, setMicFinalStatus, _sfx, playSfx } from './modules/game.js';
 import { syncMirrorFromActiveDeck, activeDeck, switchDeck, createDeck, deleteDeck, renameDeck, deckProgress, renderDecks, toggleDeck, activateDeck, startGameWithDeck, newDeckPrompt, renameDeckPrompt, confirmDeleteDeck, vmDeleteWord, vmAddManual } from './modules/decks.js';
-import { showScreen, saveName, showMenu, saveApiKey, skipApiKey, showProfile, editPlayerName, showStats, confirmReset, showFeedback, hideFeedback, exportData, importData } from './modules/ui.js';
+import { showScreen, saveName, showMenu, saveApiKey, skipApiKey, showProfile, editPlayerName, showStats, confirmReset, showFeedback, hideFeedback, exportData, importData, showAuth, authToggleMode, authSubmit, authResend, authLogout } from './modules/ui.js';
 import { pwaInstall } from './modules/pwa.js';
 import { openVocabManager, vmTab, renderVocabList, parsePastedText, onScanFile, showReview, renderReviewList, removeReviewItem, addReviewItem, confirmAddVocab } from './modules/vocab.js';
 import { startupSequence, finishStartup } from './modules/startup.js';
+import { supabase, testConnection } from './modules/supabase.js';
 
 console.log('[main] English Stars', APP_VERSION, 'startet…');
 
@@ -119,6 +120,13 @@ window.confirmReset = confirmReset;
 window.showFeedback = showFeedback;
 window.hideFeedback = hideFeedback;
 
+// Auth via window für HTML onclick-Handler
+window.showAuth = showAuth;
+window.authToggleMode = authToggleMode;
+window.authSubmit = authSubmit;
+window.authResend = authResend;
+window.authLogout = authLogout;
+
 // Startup via window für Legacy-Code (finishStartup: onclick="finishStartup()" im HTML)
 window.startupSequence = startupSequence;
 window.finishStartup = finishStartup;
@@ -147,3 +155,7 @@ window.setMusicVolume = setMusicVolume;
 window._setMusicBtns = _setMusicBtns;
 window.toggleMusic = toggleMusic;
 window.toggleVolPopup = toggleVolPopup;
+
+// Supabase-Verbindung testen (kann später raus)
+testConnection();
+window.supabase = supabase; // temporär für Debugging in DevTools
