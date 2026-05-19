@@ -92,9 +92,6 @@
   <button onclick="document.getElementById('import-file').click()" title="Fortschritt importieren">📂</button>
   <button onclick="confirmReset()" title="Fortschritt zurücksetzen" style="color:#c0001a;">🗑️</button>
 </div>
-  </div>
-  <input type="file" id="import-file" accept=".json" style="display:none" onchange="importData(event)">
-</div>
 
 <!-- ═══ PROFILE SCREEN ═══ -->
 <div id="profile-screen" style="display:none;width:100%;max-width:540px;flex-direction:column;align-items:flex-start;">
@@ -384,27 +381,8 @@
 // ════════════════════════════════════════════════
 //  DATA
 // ════════════════════════════════════════════════
-var DEFAULT_VOCAB = [
-  {de:"Januar",en:"January"},{de:"Februar",en:"February"},{de:"März",en:"March"},
-  {de:"April",en:"April"},{de:"Mai",en:"May"},{de:"Juni",en:"June"},
-  {de:"Juli",en:"July"},{de:"August",en:"August"},{de:"September",en:"September"},
-  {de:"Oktober",en:"October"},{de:"November",en:"November"},{de:"Dezember",en:"December"},
-  {de:"wie viele",en:"how many"},{de:"Kostüm",en:"costume"},{de:"Straße",en:"street"},
-  {de:"Nase",en:"nose"},{de:"sammeln",en:"to collect"},{de:"Geld",en:"money"},
-  {de:"Wohltätigkeitsorganisation",en:"charity"},{de:"besonders",en:"special"},
-  {de:"Feuer",en:"fire"},{de:"anders",en:"different"},{de:"Geschenk",en:"present"},
-  {de:"Geburtstag",en:"birthday"},{de:"enden",en:"to end"},{de:"Buchstabe",en:"letter"},
-  {de:"anfangen",en:"to start"},{de:"kalt",en:"cold"},
-  {de:"Schinken",en:"ham"},{de:"Packung",en:"packet"},{de:"Huhn",en:"chicken"},
-  {de:"Käse",en:"cheese"},{de:"Milch",en:"milk"},{de:"Flasche",en:"bottle"},
-  {de:"Brot",en:"bread"},{de:"Butter",en:"butter"},{de:"Ei",en:"egg"},
-  {de:"Banane",en:"banana"},{de:"Orange",en:"orange"},{de:"Erdbeere",en:"strawberry"},
-  {de:"Pflaume",en:"plum"},{de:"Luftballon",en:"balloon"},{de:"Kerze",en:"candle"},
-  {de:"Wasser",en:"water"},{de:"Einkaufszettel",en:"shopping list"},
-  {de:"Frohe Weihnachten!",en:"Merry Christmas!"},{de:"Süßes, sonst gibt's Saures!",en:"Trick or treat!"}
-];
 // VOCAB ist die ARBEITSREFERENZ – wird beim Deck-Switch in-place ersetzt.
-var VOCAB = DEFAULT_VOCAB.slice();
+var VOCAB = [];
 
 // ════════════════════════════════════════════════
 //  STORAGE
@@ -790,7 +768,6 @@ window.addEventListener('DOMContentLoaded',()=>{
 let _reviewItems=[];
 let _lastOCRText='';
 
-// Text-Eingabe Workflow (Live Text / Google Lens vom Handy)
 // ════════════════════════════════════════════════
 //  VOKABEL-MANAGER (Liste + Manuell + Scan + Paste)
 // ════════════════════════════════════════════════
@@ -1071,8 +1048,6 @@ function renderReviewList(){
   const dupCount=_reviewItems.filter(i=>i.isDuplicate).length;
   count.textContent=`${_reviewItems.length} Wörter erkannt · ${newCount} neu · ${dupCount} bereits vorhanden (grau)`;
 }
-
-function escHtml(s){return(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');}
 
 function removeReviewItem(i){
   _reviewItems.splice(i,1);
