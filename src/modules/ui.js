@@ -161,6 +161,8 @@ export function editPlayerName() {
   if (!trimmed) return;
   window.SD.playerName = trimmed;
   persist(window.SD);
+  console.log('[editPlayerName] window.currentUser:', window.currentUser);
+  console.log('[editPlayerName] playerName neu:', window.SD.playerName);
   if (window.currentUser) {
     saveProfile(window.SD, window.currentUser.id).catch(e => console.error('[editPlayerName] sync:', e));
   }

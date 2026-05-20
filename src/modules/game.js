@@ -5,6 +5,7 @@ import { activeDeck, syncMirrorFromActiveDeck } from './decks.js';
 import { showScreen, showMenu, hideFeedback, showFeedback } from './ui.js';
 import { ensureMicStream, releaseMicStream, voskStop, stopVisualizer, speakWord, speakWordOnce, startVoskRecognition, startRecording } from './speech.js';
 import { persist } from './storage.js';
+import { markDirty, flushPendingSync, saveExam } from './sync.js';
 
 // Game state – all on window.* so Commit B functions (still in index.html) can read them as globals
 window.isSchnellModus = false;
@@ -667,10 +668,15 @@ function updateModeProgress(animate) {
 function saveProgress() {
   if(window._progressSaved||window.isFreePlay||window.isSchnellModus)return;
   window._progressSaved=true;
+  const deck = activeDeck();
   if(window.isExamMode){
     window.SD.totalPoints+=window.points;
     if(window.points>window.SD.highscore) window.SD.highscore=window.points;
     persist();
+    if(window.currentUser && deck) {
+      markDirty('word_stats', deck.id);
+      markDirty('profile');
+    }
     return;
   }
   const cp=window.SD.categoryProgress[window.mode];
@@ -681,6 +687,10 @@ function saveProgress() {
     window.SD.totalPoints+=window.points;
     if(window.points>window.SD.highscore) window.SD.highscore=window.points;
     persist();
+    if(window.currentUser && deck) {
+      markDirty('word_stats', deck.id);
+      markDirty('profile');
+    }
   }
 }
 
@@ -692,7 +702,15 @@ function showEnd() {
     const grade=calcGrade(pct);
     const percent=Math.round(pct*100);
     const deck=activeDeck();
-    if(deck){ deck.lastExam={grade,percent,date:Date.now()}; persist(window.SD); }
+    if(deck){
+      deck.lastExam={grade,percent,date:Date.now()};
+      persist(window.SD);
+      if(window.currentUser) {
+        saveExam({ deckId: deck.id, grade, percent }, window.currentUser.id).catch(()=>{});
+        markDirty('deck', deck.id);
+        flushPendingSync().catch(()=>{});
+      }
+    }
     const newHS=window.points>=window.SD.highscore&&window.points>0;
     showScreen('end-screen');
     document.getElementById('stat-points').textContent=window.points;
@@ -709,6 +727,7 @@ function showEnd() {
   }
   const newHS=window.points>=window.SD.highscore&&window.points>0;
   persist();
+  if(window.currentUser) flushPendingSync().catch(()=>{});
   const mp=progressForCurrentMode();
   if(mp && mp.total>0 && mp.mastered>=mp.total){
     window.spawnConfetti();
