@@ -1,7 +1,6 @@
 // src/modules/sync.js
 // Cloud-Sync: Read/Write zwischen Supabase und window.SD
 import { supabase } from './supabase.js';
-import { DEFAULT_DECKS } from './default-decks.js';
 import { persist } from './storage.js';
 
 // ────────────────────────────────────────────────
@@ -12,8 +11,6 @@ function isUUID(str) {
   return typeof str === 'string' &&
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
 }
-
-let _provisioning = false;
 
 const EMPTY_CAT = {
   vocab:       { played: 0, correct: 0, bestStreak: 0 },
@@ -81,47 +78,6 @@ export async function cloudLoad(userId) {
   };
 }
 
-// ────────────────────────────────────────────────
-//  PROVISIONING — Default-Decks für neue User
-// ────────────────────────────────────────────────
-
-/**
- * Prüft ob User Decks hat. Falls nein: Default-Decks aus default-decks.js einfügen.
- * Idempotent: zweiter Aufruf macht nichts (Decks-Check am Anfang).
- */
-export async function provisionDefaultDecks(userId) {
-  if (_provisioning) return;
-  _provisioning = true;
-  try {
-    const { data: existing } = await supabase
-      .from('decks').select('id').eq('user_id', userId).limit(1);
-    if (existing?.length) return; // schon provisioniert
-
-    const now = new Date().toISOString();
-    const rows = DEFAULT_DECKS.map(def => ({
-      user_id:           userId,
-      name:              def.name,
-      vocab:             def.vocab,
-      category_progress: { ...EMPTY_CAT },
-      last_exam:         null,
-      created_at:        now,
-      updated_at:        now,
-    }));
-
-    const { data: inserted, error } = await supabase
-      .from('decks').insert(rows).select('id');
-    if (error) throw new Error('[sync] provisionDefaultDecks: ' + error.message);
-
-    // Erstes Deck als aktiv setzen
-    const { error: profErr } = await supabase
-      .from('profiles')
-      .update({ active_deck_id: inserted[0].id, updated_at: now })
-      .eq('id', userId);
-    if (profErr) throw new Error('[sync] provision profile: ' + profErr.message);
-  } finally {
-    _provisioning = false;
-  }
-}
 
 // ────────────────────────────────────────────────
 //  WRITE

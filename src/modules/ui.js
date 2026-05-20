@@ -4,7 +4,7 @@ import { effectivePct } from './stats.js';
 import { syncMirrorFromActiveDeck, activeDeck, deckProgress, renderDecks } from './decks.js';
 import { releaseMicStream, stopVisualizer, speakWord } from './speech.js';
 import { signIn, signUp, signOut, resendConfirmation } from './auth.js';
-import { cloudLoad, provisionDefaultDecks, saveProfile } from './sync.js';
+import { cloudLoad, saveProfile } from './sync.js';
 
 const API_KEY_SK = 'es_apikey';
 
@@ -496,9 +496,18 @@ export async function handleLogin(user) {
   try {
     let cloudState = await cloudLoad(user.id);
     if (!cloudState) {
-      // Neuer User: Default-Decks anlegen
-      await provisionDefaultDecks(user.id);
-      cloudState = await cloudLoad(user.id);
+      // Neuer eingeloggter User: leerer Start — User legt eigene Decks an
+      cloudState = {
+        _version: 4, playerName: '', highscore: 0, totalPoints: 0,
+        activeDeckId: null, decks: {},
+        categoryProgress: {
+          vocab:       { played: 0, correct: 0, bestStreak: 0 },
+          spelling:    { played: 0, correct: 0, bestStreak: 0 },
+          pronounce:   { played: 0, correct: 0, bestStreak: 0 },
+          mixed_vocab: { played: 0, correct: 0, bestStreak: 0 },
+        },
+        wordStats: {},
+      };
     }
     if (cloudState) {
       window.SD = cloudState;
