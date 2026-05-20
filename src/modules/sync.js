@@ -84,17 +84,24 @@ export async function cloudLoad(userId) {
 // ────────────────────────────────────────────────
 
 export async function saveProfile(sd, userId) {
-  const { error } = await supabase
-    .from('profiles')
-    .update({
-      player_name:    sd.playerName || '',
-      highscore:      sd.highscore || 0,
-      total_points:   sd.totalPoints || 0,
-      active_deck_id: isUUID(sd.activeDeckId) ? sd.activeDeckId : null,
-      updated_at:     new Date().toISOString(),
-    })
-    .eq('id', userId);
-  if (error) console.error('[sync] saveProfile:', error.message);
+  const payload = {
+    player_name:    sd.playerName || '',
+    highscore:      sd.highscore || 0,
+    total_points:   sd.totalPoints || 0,
+    active_deck_id: isUUID(sd.activeDeckId) ? sd.activeDeckId : null,
+    updated_at:     new Date().toISOString(),
+  };
+  try {
+    const { data, error } = await supabase
+      .from('profiles')
+      .update(payload)
+      .eq('id', userId)
+      .select();
+    if (error) console.error('[sync] saveProfile error:', error.message);
+    else if (!data?.length) console.warn('[sync] saveProfile: 0 rows updated — Auth oder RLS?');
+  } catch(ex) {
+    console.error('[saveProfile] EXCEPTION:', ex);
+  }
 }
 
 /**
