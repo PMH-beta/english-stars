@@ -22,3 +22,7 @@ implementierung-gestaltwandler.md
 
 # Lokale DB-Backup-Kopien (Script scripts/db-backup.mjs)
 db-backups/
+
+# Design-Handoff: Screenshots bleiben lokal (14 MB Binaerdateien).
+# tokens.json und DESIGN.md liegen bewusst IM Repo.
+design-handoff/screenshots/
